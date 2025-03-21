@@ -1,0 +1,346 @@
+---
+title: "Application for Clearwater Analytics" 
+author: "Shubha Swarnim Singh"
+editor: visual
+format:
+  html:
+    embed-resources: true
+---
+
+Installing all the necessary libraries for my project.
+
+```{r}
+library(readr)
+library(dplyr)
+library(knitr)
+library(tidyverse)
+library(tidymodels)
+library(caret)
+library(ISLR2)
+library(readODS)
+library(ggrepel)
+
+tidymodels_prefer()
+```
+
+I took the Spotify data et for my final project. The data set provides details on several tracks by the artists, featuring columns like "Artist," "Track," "Album," and numeric values reflecting characteristics of each song. Notably, the dataset includes attributes such as dance ability, energy, loudness, speechiness, acoustics, and duration. Each row corresponds to a specific track, with associated quantitative metrics offering insights into the musical features of different songs.\
+The variables used in this dataset are:
+
+-   **Artist**: The name of the musician or band that performed the track.
+
+-   **Track**: The title of the song.
+
+-   **Album**: The name of the album in which the track is included.
+
+-   **Album_type**: The category of the album, such as single, EP, or full-length album.
+
+-   **Danceability**: A numerical measure of how suitable the track is for dancing.
+
+-   **Energy**: A measure of the intensity and activity level of the track.
+
+-   **Loudness**: The overall volume level of the track in decibels.
+
+-   **Speechiness**: A measure of the amount of spoken words in the track.
+
+-   **Acousticness**: A measure indicating the likelihood of the track being acoustic.
+
+-   **Instrumentalness**: A measure of the absence of vocals in the track.
+
+-   **Liveness**: A measure indicating the probability of the track being recorded live.
+
+-   **Valence**: A measure of how positive or happy the track sounds.
+
+-   **Tempo**: The speed of the track, measured in beats per minute (BPM).
+
+-   **Duration_min**: The length of the track in minutes.
+
+-   **Title**: The official name or title of the track.
+
+-   **Channel**: The platform or YouTube channel where the track is published.
+
+-   **Views**: The total number of times the track has been viewed.
+
+-   **Likes**: The number of likes the track has received.
+
+-   **Comments**: The number of comments on the track.
+
+-   **Licensed**: Indicates whether the track is officially licensed.
+
+-   **Official_video**: Specifies whether the track has an official music video.
+
+-   **Stream**: The total number of times the track has been streamed on platforms like Spotify.
+
+-   **EnergyLiveness**: A combined metric that measures both the intensity and live presence of the track.
+
+-   **Most_playedon**: The platform where the track has been played the most.
+
+The reason for me to choose this project was because a lot of us in the intro presentation wrote about music history and what kind of music we love. Therefore, I thought it would be an interesting topic to show to the class because most of us will be actively engaged throughout the presentation process. The first problem that I had was the space. the file was over 5 MB, and R Studio does not allow any files larger than 5 MB. Therefore, I had to manually remove some of the unwanted columns from the data set before I loaded it into the server. Here, Unwanted columns are those which do not contribute to the graph like acoustics of the song or time duration of the song.
+
+```{r}
+#reading the data set
+spotify <- read_csv("~/Downloads/spotify_dataset.csv")
+head(spotify)
+
+```
+
+Factoring categorical variables, such as `Licensed` and `Official_video`, is essential for statistical analysis and modeling because it allows R to treat these variables appropriately, enabling more accurate and meaningful insights from the data.
+
+```{r}
+spotify_data <- spotify |>
+  mutate(
+    Licensed = factor(Licensed),
+    Official_video = factor(official_video)
+  )
+
+```
+
+The wrangling process is done. everything has been cleared and it is ready to be used for data analysis. the dataset now can be used in interpreting and visualizing graphs.
+
+First, I am visualizing an awful graph. It may be aesthetically correct but the data it represents makes no sense. The variables used will provide no meaningful result in understanding the Spotify dataset. I chose a scatterplot for this because we see that a lot of entries are overlapped, and it is very unclear to read the data. Also, there is no relevance between loudness and likes therefore, it is measuring two random variables which has no major significance in the data set. It provides no information to the people reading this.
+
+```{r}
+#creating an example of awful graph
+spotify_data <- subset(spotify_data, official_video != 0)
+ggplot(spotify_data, aes(x = Loudness, y = Likes, color = factor(official_video))) +
+  geom_point() + theme_minimal()
+  labs(title = "Scatterplot of Loudness vs Likes",
+       x = "Loudness", y = "Likes")
+```
+
+Now, we are visualizing the graph that will provide people with appropriate information and they can learn from it too. This graph represents the danceability of songs which means if the dance can be danced into or not. A histogram with the frequency of dance abilities will show how many songs on Spotify can be danced into.
+
+```{r}
+ggplot(spotify_data, aes(x = Danceability)) +
+  geom_histogram(binwidth = 0.1, fill = "darkgreen", color = "black", alpha = 0.8) +
+  labs(title = "Distribution of Danceability",
+       x = "Danceability", y = "Frequency") +
+  theme_minimal()
+
+```
+
+I also made another visualization which is probably the most important part of this dataset, and it is the most popular artist in the world based on the streams provided in the dataset. For this visualization, a normal bar graph was enough because it shows the number of streams and the name of the artist as well.
+
+```{r}
+# Sorting the data by Stream and selecting the top ten artists
+# Summing up the streams by each artist
+artist_streams <- spotify_data |>
+  group_by(Artist) |>
+  summarise(TotalStreams = sum(Stream, na.rm = TRUE)) |>
+  arrange(desc(TotalStreams)) |>  # Arranging in descending order
+  head(10)  # Selecting the top ten artists
+
+# Creating a bar chart for the top ten artists based on total streams
+ggplot(artist_streams, aes(x = reorder(Artist, TotalStreams), y = TotalStreams, fill = Artist)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top Ten Artists Based on Total Streams",
+       x = "Artist", y = "Total Streams") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(labels = scales::comma_format(scale = 1e-9, suffix = "B"))
+
+```
+
+\`\`\` Citations: <https://www.kaggle.com/datasets/sanjanchaudhari/spotify-dataset>
+
+Now, we will split our Spotify dataset into training and test sets. This is crucial for building and evaluating our models. The training set will be used to train the models, while the test set will be used to evaluate their performance. Setting a seed ensures that the split is reproducible.
+
+```{r}
+set.seed(427)
+
+# Split the data into training and test sets
+spotify_split <- initial_split(spotify_data, prop = 0.75, strata = Stream)
+spotify_train <- training(spotify_split)
+spotify_test <- testing(spotify_split)
+```
+
+Next, we will create three different preprocessing recipes for linear regression models. Each recipe will handle missing values and categorical variables differently. This helps us understand how different preprocessing strategies affect model performance.\
+\
+
+```{r}
+
+# Recipe 1: Using KNN imputation
+lm_knnimpute <- recipe(Stream ~ ., data = spotify_train) |> 
+  step_nzv(all_predictors()) |>  # Remove zero or near-zero variance predictors
+  step_impute_knn(all_numeric_predictors()) |>  # Impute missing values using KNN
+  step_unknown(all_nominal_predictors()) |>  # Handle missing categorical values
+  step_other(all_nominal_predictors(), threshold = 0.01, other = "Other") |>  # Lump rare categories
+  step_dummy(all_nominal_predictors(), one_hot = FALSE) |>  # Create dummy variables
+  step_corr(all_numeric_predictors(), threshold = 0.75) |>  # Remove highly correlated predictors
+  step_lincomb(all_numeric_predictors())  # Remove linear combinations
+
+# Recipe 2: Using mean imputation
+lm_meanimpute <- recipe(Stream ~ ., data = spotify_train) |> 
+  step_nzv(all_predictors()) |>  # Remove zero or near-zero variance predictors
+  step_impute_mean(all_numeric_predictors()) |>  # Impute missing values using mean
+  step_unknown(all_nominal_predictors()) |>  # Handle missing categorical values
+  step_other(all_nominal_predictors(), threshold = 0.01, other = "Other") |>  # Lump rare categories
+  step_dummy(all_nominal_predictors(), one_hot = FALSE) |>  # Create dummy variables
+  step_corr(all_numeric_predictors(), threshold = 0.75) |>  # Remove highly correlated predictors
+  step_lincomb(all_numeric_predictors())  # Remove linear combinations
+
+# Recipe 3: Using median imputation
+lm_medianimpute <- recipe(Stream ~ ., data = spotify_train) |> 
+  step_nzv(all_predictors()) |>  # Remove zero or near-zero variance predictors
+  step_impute_median(all_numeric_predictors()) |>  # Impute missing values using median
+  step_unknown(all_nominal_predictors()) |>  # Handle missing categorical values
+  step_other(all_nominal_predictors(), threshold = 0.01, other = "Other") |>  # Lump rare categories
+  step_dummy(all_nominal_predictors(), one_hot = FALSE) |>  # Create dummy variables
+  step_corr(all_numeric_predictors(), threshold = 0.75) |>  # Remove highly correlated predictors
+  step_lincomb(all_numeric_predictors())  # Remove linear combinations
+```
+
+Finally, we will create three different preprocessing recipes for \$K\$-nearest neighbors models. Similar to the linear regression recipes, these will handle missing values and categorical variables differently. This helps us explore how preprocessing impacts the performance of \$K\$-nearest neighbors models.
+
+```{r}
+# Recipe 1: Using KNN imputation
+knn_preproc1 <- recipe(Stream ~ ., data = spotify_train) |> 
+  step_nzv(all_predictors()) |>  # Remove zero or near-zero variance predictors
+  step_impute_knn(all_numeric_predictors()) |>  # Impute missing values using KNN
+  step_unknown(all_nominal_predictors()) |>  # Handle missing categorical values
+  step_other(all_nominal_predictors(), threshold = 0.01, other = "Other") |>  # Lump rare categories
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) |>  # One-hot encode categorical variables
+  step_corr(all_numeric_predictors(), threshold = 0.75) |>  # Remove highly correlated predictors
+  step_lincomb(all_numeric_predictors()) |>  # Remove linear combinations
+  step_normalize(all_numeric_predictors())  # Normalize numeric predictors
+
+# Recipe 2: Using mean imputation
+knn_preproc2 <- recipe(Stream ~ ., data = spotify_train) |> 
+  step_nzv(all_predictors()) |>  # Remove zero or near-zero variance predictors
+  step_impute_mean(all_numeric_predictors()) |>  # Impute missing values using mean
+  step_unknown(all_nominal_predictors()) |>  # Handle missing categorical values
+  step_other(all_nominal_predictors(), threshold = 0.01, other = "Other") |>  # Lump rare categories
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) |>  # One-hot encode categorical variables
+  step_corr(all_numeric_predictors(), threshold = 0.75) |>  # Remove highly correlated predictors
+  step_lincomb(all_numeric_predictors()) |>  # Remove linear combinations
+  step_normalize(all_numeric_predictors())  # Normalize numeric predictors
+
+# Recipe 3: Using median imputation
+knn_preproc3 <- recipe(Stream ~ ., data = spotify_train) |> 
+  step_nzv(all_predictors()) |>  # Remove zero or near-zero variance predictors
+  step_impute_median(all_numeric_predictors()) |>  # Impute missing values using median
+  step_unknown(all_nominal_predictors()) |>  # Handle missing categorical values
+  step_other(all_nominal_predictors(), threshold = 0.01, other = "Other") |>  # Lump rare categories
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) |>  # One-hot encode categorical variables
+  step_corr(all_numeric_predictors(), threshold = 0.75) |>  # Remove highly correlated predictors
+  step_lincomb(all_numeric_predictors()) |>  # Remove linear combinations
+  step_normalize(all_numeric_predictors())  # Normalize numeric predictors
+```
+
+#### Exercise 7: Creating a Workflow Set
+
+**Introduction:** In this step, we will create a set of workflows that include different combinations of preprocessing recipes and models. Specifically, we will create three linear regression workflows (one for each of the three recipes) and nine KNN workflows (three different K values for each of the three recipes). This allows us to compare the performance of different preprocessing strategies and model configurations.
+
+```{r}
+# Linear regression model
+lm_model <- linear_reg() |> set_engine("lm")
+
+# KNN models with different K values
+knn5_model <- nearest_neighbor(mode = "regression", neighbors = 5) |> set_engine("kknn")
+knn10_model <- nearest_neighbor(mode = "regression", neighbors = 10) |> set_engine("kknn")
+knn15_model <- nearest_neighbor(mode = "regression", neighbors = 15) |> set_engine("kknn")
+
+# Define preprocessing strategies for KNN
+knn_preprocessors <- list(
+  knn_knn_impute = knn_preproc1,
+  knn_mean_impute = knn_preproc2,
+  knn_median_impute = knn_preproc3
+)
+
+# Define preprocessing strategies for Linear Regression
+lm_preprocessors <- list(
+  lm_knn_impute = lm_knnimpute,
+  lm_mean_impute = lm_meanimpute,
+  lm_median_impute = lm_medianimpute
+)
+
+# Associate models with preprocessing strategies
+knn_models <- list(
+  knn5 = knn5_model,
+  knn10 = knn10_model,
+  knn15 = knn15_model
+)
+
+lm_models <- list(
+  lm_model = lm_model
+)
+
+# Create workflow sets
+knn_workflows <- workflow_set(knn_preprocessors, knn_models, cross = TRUE)
+lm_workflows <- workflow_set(lm_preprocessors, lm_models, cross = TRUE)
+
+# Combine workflows
+all_models <- bind_rows(lm_workflows, knn_workflows)
+
+print(all_models)  # Check workflows
+```
+
+#### Exercise 8: Evaluating Workflows with Cross-Validation
+
+**Introduction:** We will now use 5-fold cross-validation with 5 repeats to evaluate the performance of each workflow. This involves computing the Root Mean Squared Error (RMSE) and R-squared (R²) for each workflow. Cross-validation helps us assess how well our models generalize to unseen data.
+
+```{r}
+# Define metrics
+spotify_metrics <- metric_set(rmse, rsq)
+
+# Define 5-fold CV with 5 repeats
+spotify_folds <- vfold_cv(spotify_train, v = 5, repeats = 5)
+
+# Fit resamples for all models
+all_fits <- all_models |> 
+  workflow_map("fit_resamples",
+               resamples = spotify_folds,
+               metrics = spotify_metrics)
+
+# Collect and display RMSE results
+collect_metrics(all_fits) |> 
+  filter(.metric == "rmse") |> 
+  kable()
+
+# Collect and display R-squared results
+collect_metrics(all_fits) |> 
+  filter(.metric == "rsq") |> 
+  kable()
+```
+
+#### Exercise 9: Plotting Cross-Validation Results
+
+**Introduction:** Next, we will visualize the results of our cross-validation to identify the best-performing workflow. We will plot the RMSE and R² values for each workflow. Higher R² values and lower RMSE values indicate better model performance.
+
+```{r}
+# Plot RMSE results
+autoplot(all_fits, metric = "rmse") +
+  geom_text_repel(aes(label = wflow_id), nudge_x = 1/8, nudge_y = 1/100, angle = 90) +
+  theme(legend.position = "none")
+
+# Plot R-squared results
+autoplot(all_fits, metric = "rsq") +
+  geom_text_repel(aes(label = wflow_id), nudge_x = 1/8, nudge_y = 1/100, angle = 90) +
+  theme(legend.position = "none")
+```
+
+As we know, higher R² values and lower RMSE values are better. From the graphs, we can see that the linear regression models generally perform better than the KNN models. Specifically, the `lm_knn_impute_lm_model` shows the best performance with the lowest RMSE and highest R² values.
+
+#### Exercise 10: Re-fitting the Best Model and Estimating Error Metrics on the Test Set
+
+**Introduction:** Finally, we will re-fit our best model (`lm_knn_impute_lm_model`) on the entire training set and estimate its error metrics on the test set. This step helps us understand how well our best model performs on unseen data.
+
+```{r}
+# Extract the best workflow
+best_workflow <- all_models |>
+  extract_workflow("lm_knn_impute_lm_model")
+
+# Fit the best model on the entire training set
+final_fit <- best_workflow |>
+  fit(data = spotify_train)
+
+# Predict on the test set
+final_predict <- final_fit |>
+  predict(new_data = spotify_test) |>
+  bind_cols(spotify_test)
+
+# Calculate error metrics on the test set
+test_metrics <- final_predict |>
+  metrics(truth = Stream, estimate = .pred)
+
+test_metrics |> kable()
+```

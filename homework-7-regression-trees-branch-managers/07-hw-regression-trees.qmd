@@ -1,0 +1,353 @@
+---
+title: "Homework 7: Regression Trees"
+author: "Aayush, Ashley, Shubha"
+editor: visual
+format:
+  html:
+    embed-resources: true
+---
+
+```{r setup}
+#| include: false
+
+library(tidyverse)
+library(tidymodels)
+library(knitr)
+library(readr)
+library(rpart.plot)
+
+tidymodels_prefer()
+```
+
+# Introduction
+
+In this homework you will practice fitting regression trees and and using model tuning to select models.
+
+## Learning goals
+
+In this assignment, you will...
+
+-   Fit and interpret regression trees
+-   Use grid-based techniques to choose tuning parameters
+
+# Getting Started
+
+You are free to use whatever version control strategy you like.
+
+## Teams & Rules
+
+You can find your team for this assignment on Canvas in the **People** section. The group set is called **HW7**. Your group will consist of 2-3 people and has been randomly generated. The GitHub assignment can be found [here](https://classroom.github.com/a/DkTfH-Nj). Rules:
+
+1.  You are all responsible for understanding the work that your team turns in.
+2.  All team members must make roughly equal contributions to the homework.
+3.  Any work completed by a team member must be committed and pushed to GitHub by that person.
+
+# Dataset: Communities and Crime
+
+For this homework, we'll return to the Communities and Crime data set from the UCI Machine Learning repository. From the abstract:
+
+> "Communities in the US. Data combines socio-economic data from the '90 Census, law enforcement data from the 1990 Law Enforcement Management and Admin Stats survey, and crime data from the 1995 FBI UCR."
+
+More details can be found [here](http://archive.ics.uci.edu/ml/datasets/communities+and+crime+unnormalized). Our goal will be to predict the number of crimes per capita, stored in the column called `ViolentCrimesPerPop`.
+
+## Cleaning and Preprocessing
+
+## Exercise 1
+
+::: {.callout-tip title="Question"}
+Load the data set `CommViolPredUnnormalizedDataCleaned.csv` and clean it. Hint: review Exercises 1-4 of your previous homework.
+:::
+
+```{r}
+#| message: false
+#| warning: false
+#| output: false
+# Read the dataset and replace '?' with NA
+data <- read_csv("CommViolPredUnnormalizedDataCleaned.csv", na = "?")
+
+str(data)
+summary(data)
+colSums(is.na(data))
+
+# Drop the specified non-predictive and goal variables (except ViolentCrimesPerPop)
+data_cleaned <- data |>
+select(-communityName, 
+         -statecode, 
+         -countyCode, 
+         -communityCode, 
+         -fold, 
+         -population, 
+         -householdsize, 
+         -PctNotHSGrad, 
+         -PctUnemployed, 
+         -PctUsePubTrans, 
+         -MedYrHousBuilt, 
+         -PctForeignBorn, 
+         -PctBornSameState, 
+         -PctSameHouse85, 
+         -PctSameCity85, 
+         -PctSameState85)
+
+# Ensure correct data types
+data_cleaned <- data_cleaned |>
+  mutate(across(where(is.character), as.factor))  # Convert all character columns to factors if necessary
+
+data_cleaned <- data_cleaned|>
+  drop_na(ViolentCrimesPerPop)
+```
+
+## Exercise 2
+
+::: {.callout-tip title="Question"}
+Split the data into a training and test set using an 80-20 split. Use the seed 427.
+:::
+
+```{r}
+
+# Split the data into training and testing sets using stratified sampling
+set.seed(427)
+
+split <- initial_split(data_cleaned, prop = 0.8, strata = "ViolentCrimesPerPop")
+train_data <- training(split)
+test_data <- testing(split)
+
+
+```
+
+## Exercise 3
+
+::: {.callout-tip title="Question"}
+Generate a recipe that can be used with a regression tree.
+:::
+
+```{r}
+# Set up the recipe
+crime_recipe <- recipe(ViolentCrimesPerPop ~ ., data = train_data) |> 
+  step_integer(all_nominal_predictors(), -all_outcomes()) |>   # convert factor levels to integers
+  step_dummy(all_nominal_predictors(), one_hot = TRUE)         # one-hot encode any remaining nominal vars
+```
+
+# Baseline Model
+
+Before we start building fancy models, it's helpful to understand our data and to have a simple baseline for comparison.
+
+## Exercise 4
+
+::: {.callout-tip title="Question"}
+What was the best model from your last homework? Write out the model below in a neat format. What was it's RMSE and $R^2$?
+:::
+
+Ideally we'd like any model we create to make better predictions that this baseline model. Hopefully, we can do better than this model using a regression tree.
+
+**Ridge regression was better in the last homework.**
+
+**The best model was as follows:**
+
+```{r}
+#| eval: false
+
+ridge_rmse_final <- finalize_workflow(ridge_wf, best_rmse_ridge)
+ridge_rmse_fit <- fit(ridge_rmse_final, data = train_data)
+
+ridge_test_res <- ridge_rmse_fit |> 
+  predict(test_data) |> 
+  bind_cols(test_data) |> 
+  metrics(truth = ViolentCrimesPerPop, estimate = .pred)
+
+```
+
+**The following was it's RMSE and R² when compared to LASSO**:
+
+| Metric   | Ridge  | Lasso  | Better Model                 |
+|----------|--------|--------|------------------------------|
+| **RMSE** | 368.69 | 376.37 | Ridge since lower is better  |
+| **R²**   | 0.6142 | 0.5988 | Ridge since higher is better |
+
+**As we can see, ridge regression outperformed Lasso in both RMSE as well as R² .**
+
+## Exercise 5
+
+::: {.callout-tip title="Question"}
+Before you fit any trees, do you think a decision tree will have better performance than the baseline model? Describe the differences between linear models and decision trees including the advantages and disadvantages of each.
+:::
+
+**Before fitting a decision tree, it’s uncertain whether it will outperform the baseline ridge regression model, which has already shown strong predictive performance with lower RMSE and higher R² compared to lasso. Ridge regression is a regularized linear model that handles multicollinearity well and offers stable predictions when relationships between variables are mostly linear. However, ridge may struggle to capture nonlinear patterns or variable interactions, which can limit its ability to model more complex relationships in the data. If such complexities exist in the Communities and Crime dataset, a decision tree may offer improved performance by detecting and modeling them.**
+
+**Decision trees differ from linear models in that they make predictions by learning a series of decision rules based on the values of input variables. This allows them to naturally capture nonlinear relationships and interactions without the need for manual feature engineering. They also require less preprocessing, as they are unaffected by the scale or distribution of variables. However, decision trees are more prone to overfitting and can be unstable, especially when not properly pruned or regularized. While they have the potential to outperform ridge in the presence of complex data structures, they often require careful tuning to achieve reliable and generalizable results.**
+
+# Regression Trees
+
+## Exercise 6
+
+::: {.callout-tip title="Question"}
+Find a good Regression Tree to model the data. Use a grid search and cross-validation to find a good complexity parameter.
+:::
+
+```{r}
+crime_tree <- decision_tree(cost_complexity = tune()) |> 
+  set_engine("rpart") |> 
+  set_mode("regression")
+
+crime_tree_wf <- workflow() |> 
+  add_recipe(crime_recipe) |> 
+  add_model(crime_tree)
+```
+
+```{r}
+#| cache: true
+set.seed(427)
+
+crime_folds <- vfold_cv(train_data, v = 2, repeats = 1)
+crime_grid <- grid_regular(cost_complexity(range = c(-4, -1)), levels = 20)
+
+tuning_cp_results <- tune_grid(
+  crime_tree_wf,
+  resamples = crime_folds,
+  grid = crime_grid
+)
+
+autoplot(tuning_cp_results)
+```
+
+```{r}
+#| warning: false
+#note: defaulted to rmse
+best_tree <- select_best(tuning_cp_results)
+best_tree |> kable()
+```
+
+## Exercise 7
+
+::: {.callout-tip title="Question"}
+Fit your tree on the entire training set and use the `rpart` functions from class to display it.
+:::
+
+```{r}
+#not sure if roundint = false is the best option here, but for the sake of simplicity:
+best_wf <- finalize_workflow(crime_tree_wf, best_tree)
+best_model <- best_wf |> fit(train_data)
+
+best_model |> 
+  extract_fit_engine() |> 
+  rpart.plot(roundint = FALSE)
+```
+
+## Exercise 8
+
+::: {.callout-tip title="Question"}
+Based on your tree, which variable do you think is most important for determining the number of Violent Crimes Per Capita?.
+:::
+
+`PctKidsBornNeverMar`
+
+## Exercise 9
+
+::: {.callout-tip title="Question"}
+How many different predictions are possible from your regression tree model? Why? How does this compare with the baseline model you selected in Exercise 4.
+:::
+
+-   There are 7 different predictions possible from our regression model. [Each leaf node corresponds with a prediction, as it averages all the training data points that reach said leaf](https://www2.stat.duke.edu/~rcs46/lectures_2017/08-trees/08-tree-regression.pdf). (Slide 4)
+
+-   Ridge regularization, used in the baseline model, [is a continuous process](https://stats.stackexchange.com/questions/225426/continuous-process-vs-discrete-process#:~:text=Thus%2C%20this-,is%20a%20continuous%20process,-and%20you), whereas the regression tree makes a fixed number of predictions.
+
+# Final Evaluation
+
+## Exercise 9
+
+::: {.callout-tip title="Question"}
+Compute the root mean squared error for your regression tree model applied to the test set.
+:::
+
+```{r}
+crime_test_wpreds <- bind_cols(test_data, predict(best_model, new_data = test_data))
+
+rmse(crime_test_wpreds, truth = ViolentCrimesPerPop, estimate = .pred) |> kable()
+```
+
+## Exercise 10
+
+::: {.callout-tip title="Question"}
+How does the test error compare to the baseline model? Which model has better performance? Compare the interpretability of each model.
+:::
+
+The RMSE of the regression tree model is higher than that of the baselines ridge model from exercise 4. therefore we can say that regression tree had worse accuracy on the test data.
+
+Tree model is easier to interpret because you can visualize the split but looks like it sacrifices performance compared to ridge. In Ridge, you cannot see anything other than the performance. therefore, Tree model can be interpretative easily because you can visualizes the spit of the variables.
+
+## Exercise 11
+
+::: {.callout-tip title="Question"}
+Look at the documentation for `decision_tree` by typing `?decision_tree` in your console. Notice that there are two other tuning parameters, `tree_depth` (defaults to 30) and `min_n` (defaults to 2). Use an [irregular grid](https://www.tmwr.org/grid-search#irregular-grids) with at least 100 points and cross-validation to find an optimal combination of your three tuning parameters. Why do you think we want to use an irregular grid, rather than a regular grid here?
+:::
+
+```{r}
+set.seed(427)
+
+
+crime_tree_tune <- decision_tree(cost_complexity = tune(), tree_depth = tune(), min_n = tune()) |> 
+  set_engine("rpart") |> 
+  set_mode("regression")
+
+#workflow
+crime_tree_wf_tune <- workflow() |> 
+  add_recipe(crime_recipe) |> 
+  add_model(crime_tree_tune)
+
+#irregular grid
+irregular_grid <- grid_latin_hypercube(
+  cost_complexity(),
+  tree_depth(range = c(1, 30)),
+  min_n(range = c(2, 20)),
+  size = 100
+)
+
+irregular_grid
+
+crime_folds <- vfold_cv(train_data, v = 5)
+
+#tuning the model
+tune_results <- tune_grid(
+  crime_tree_wf_tune,
+  resamples = crime_folds,
+  grid = irregular_grid
+)
+
+#best parameters
+best_params <- select_best(tune_results)
+best_params |> kable()
+
+```
+
+The Latin hypercube design or any other irregular grid spaces the points farther away from one another and allows a better exploration of the hyperparameter space. They are efficient and are the most band for buck because they explore hyper parameter combinations more thoroughly with less computation.
+
+## Exercise 12
+
+::: {.callout-tip title="Question"}
+Fit the resulting model to the full training data and estimate it's performance on the test set.
+:::
+
+```{r}
+#Final workflow with best parameters
+final_tree_wf <- finalize_workflow(crime_tree_wf_tune, best_params)
+
+#Fit the model
+final_tree_model <- fit(final_tree_wf, data = train_data)
+
+final_preds <- predict(final_tree_model, new_data = test_data) |> 
+  bind_cols(test_data)
+
+rmse(final_preds, truth = ViolentCrimesPerPop, estimate = .pred) |> kable()
+
+```
+
+After tuning the hyper-parameters and using an irregular grid search, we observed that the RMSE of the final tree is still higher than the baseline ridge model which had an RMSE of 368.69 from exercise 4. This suggests that even with tuning, the regression tree cannot match the accuracy of a baseline Ridge model.
+
+## Exercise 13 (Practice interview question)
+
+::: {.callout-tip title="Question"}
+Describe how `tree_depth` and `min_n` should impact the flexibility and bias-variance trade off of the resulting tree.
+:::
+
+-   tree_depth: as the depth increases, the model becomes more detailed reducing bias but increasing variance. A small tree may under fit the data and have bias.
+
+-   min_n: Big min_n means there is enough data to back up the split. When this happens the decisions are more sharp and accurate. But the small min_n makes the tree more detailed but it might over fit the training data. Big min_n makes the tree simpler but helps over fitting.

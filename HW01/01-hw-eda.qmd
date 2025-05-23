@@ -1,0 +1,312 @@
+---
+title: "Homework 1: Exploratory Data Analysis"
+author: "My name"
+editor: visual
+format:
+  html:
+    embed-resources: true
+---
+
+```{r setup}
+#| echo: false
+#| include: false
+library(tidyverse)
+library(knitr)
+library(ggformula)
+```
+
+Adapted from "Start teaching with R," created by R Pruim, N J Horton, and D Kaplan, 2013, "Interactive and Dynamic Graphics for Data Analysis," by Dianne Cook and Deborah F. Swayne, and Colby Long's DATA 325 Course at Wooster College.
+
+# Introduction
+
+One of the most important components of data science is exploratory data analysis. I really like the following definition, which comes from [this article](https://towardsdatascience.com/exploratory-data-analysis-8fc1cb20fd15) (though it's probably not the original source).
+
+> Exploratory Data Analysis refers to the critical process of performing initial investigations on data so as to discover patterns, spot anomalies, to test hypotheses and to check assumptions with the help of summary statistics and graphical representations.
+
+Before you begin your exploratory analysis, you may already have a particular question in mind. For example, you might work for an online retailer and want to develop a model to predict which purchased items will be returned. Or, you may not have a particular question in mind. Instead, you might just be asked to look at browsing data for several customers and figure out some way to increase purchases. In either case, before you construct a fancy model, you need to explore and understand your data. This is how you gain new insights and determine if an idea is worth pursuing.
+
+## Understanding your data
+
+Today we will be working with the `TIPS` data set which is in the `regclass` package. The data in the `TIPS` dataset is information recorded by one waiter about each tip he received over a period of a few months working in a restaurant. We would like to use this data to address the question, *"What factors affect tipping behavior?"*
+
+### Exercise 1
+
+Install the `regclass` package by either typing `install.packages("regclass")` in the console or by clicking "Tools \> Install Packages" and selecting the package. Once you have done this, the code chunk below will load the package and data set. Notice that a bunch of unnecessary output is included when you knit the document. Change the [Quarto chunk options](https://quarto.org/docs/computations/execution-options.html) so that this is not displayed.
+
+```{r}
+library(regclass)
+data("TIPS")
+head(TIPS)
+summary(TIPS)
+```
+
+When exploring a new data set, it's important to first understand the basics. What format is our data in? What types of information are included in the data set? How many observations are there?\
+\
+There are a total of 244 observations. And the datas include:
+
+TipPercentage = Integer
+
+Bill = Integer
+
+Tip = Integer
+
+Gender = categorical
+
+Smoker = Categorical
+
+Weekday = Days of the week
+
+Time = Categorical
+
+PartySize = integer
+
+### Exercise 2
+
+In R, data sets are usually stored in a 2-dimensional structure called a *data frame*. The `tidyverse` provides a lot of useful functions for a variety of applications including data exploration and the particular flavor of data frame that the tidyverse uses is called a `tibble`. After loading the `tidyverse` library, you can get an idea of the structure of a data set using the syntax `str(dataset)` or `glimpse(data)`, and you can peak at the first few rows and columns with `head(dataset)`. Create a code chunk below, and use these functions (and others) in the R chunk below to better understand the data. How many tips are recorded in this data set? Which days of the week did the waiter work?
+
+Often, a data set will come with a *code book* which gives more complete information about the structure of the data, the meaning of variables, and how the data were collected. In this case, most of the column names are pretty self explanatory.
+
+| Variable        | Description                               |
+|-----------------|-------------------------------------------|
+| `TipPercentage` | the gratuity, as a percentage of the bill |
+| `Bill`          | the cost of the meal in US dollars        |
+| `Tip`           | the tip in US dollars                     |
+| `Gender`        | gender of the bill payer                  |
+| `Smoker`        | whether the party included smokers        |
+| `Weekday`       | day of the week                           |
+| `Time`          | time the bill was paid                    |
+| `PartySize`     | size of the party                         |
+
+```{r}
+num_tips <- nrow(TIPS)
+num_tips
+```
+
+There were 244 observations in the data set. Similarly, there are 244 tips rerecorded in this data set.
+
+```{r}
+working_days <- unique(TIPS$Weekday)
+working_days
+```
+
+There are 4 days that the waiter worked on. Those were Thursday Friday, Saturday and Sunday.
+
+### Exercise 3
+
+Even though the column names are self-explanatory, we might have more questions about the data. For example, we might conjecture that people tip differently for breakfast and lunch, but our data only tells us if the bill was paid at "Day" or "Night." State another reasonable conjecture about a factor that might affect tipping behavior. What additional information would be helpful to explore that conjecture?
+
+Size of the party could be another conjecture that could affect the tipping behavior of people. I expect the tips to be higher if the amount of people coming to the party is higher.
+
+# Numerical Summaries
+
+Now we'd like to start looking closely at the data set to develop some ideas about what factors might affect tipping. The basic descriptive statistics have obvious names, like `mean, median, sd, IQR, quantile`, etc. When using the `tidyverse` you use these in conjuction with the function `summarize`. Other options for data exploration include the function `summary()`, which computes several numerical summaries all at once, and the `skimr` package which includes many useful functions for taking a quick look at your data. We can apply these functions to an entire data frame or a specific column of the data fame.
+
+### Exercise 4
+
+Use some of these summaries to answer the following. How many smokers are in the data set? How fancy do you think restaurant is? Is it possible to tell from this summary how many different shifts the waiter worked? Why or why not?
+
+After using the summary function, we can see that there are 93 smokers in the data set. Also, i think it is safe to conclude that it is probably not a fancy restaurant because the mean bill is \$19.79 and the highest bill is only \$50.91. While it is possible to see what says waiters worked, it is not possible to tell how many shifts a waiter has worked.
+
+As we start to explore different questions, we might want to know things about interactions between variables. Like, are tips larger during the day or at night? Or does gender or smoking status matter for how much people spend and how much they tip? You can calculate statistics within groups by including grouping variables and using `group_by` or `aggregate` like this:
+
+```{r}
+# Tidyverse
+TIPS |> 
+  group_by(Time) |> 
+  summarize(median(Tip))
+
+TIPS |> 
+  group_by(Gender, Smoker) |> 
+  summarize(avg_bill = mean(Bill), avg_TipPerc = mean(TipPercentage))
+
+# Using aggregate
+aggregate(Tip ~ Time, data = TIPS, FUN = median)
+aggregate(cbind(Bill, TipPercentage) ~ Gender + Smoker, data = TIPS, FUN = mean)
+
+```
+
+We can also use the `kable` function from the `knitr` package to make our tables look pretty:
+
+```{r}
+library(knitr)
+
+TIPS |> 
+  group_by(Time) |> 
+  summarize(median(Tip)) |> 
+  kable()
+```
+
+The `~` (tilde) symbol appears in a lot of functions. In R, a **formula** is an expression involving `~` that provides slots for laying out how you want to relate variables: `y ~ x` means "$y$ versus $x$", "$y$ depends on $x$", or "break down $y$ by $x$". In the first case above, you're saying "break Tip down by Time" or "perform this function on the Tip, conditioned on Time."
+
+### Exercise 5
+
+Calculate the variance of the tip percentage broken down by day of the week. Do you notice anything unusual? Explore the data and determine a possible cause for this.
+
+```{r}
+TIPS |> group_by(Weekday)|>
+  summarize(var_tips = var(TipPercentage))
+```
+
+Sunday comparatively has a lot of variance (71.82) compared to Friday, Saturday and Thursday.
+
+For categorical variables, we can create tables as follows:
+
+```{r, message=FALSE}
+# Using table
+table(TIPS$Smoker, TIPS$Gender) |> 
+  kable()
+
+# Using xtabs
+xtabs(~ Smoker + Gender, data = TIPS) |> 
+  kable()
+
+# Using the janitor package (my favorite)
+library(janitor)
+TIPS |> 
+  tabyl(Smoker, Gender) |>  # creates table
+  adorn_totals(where = c("row", "col")) |>  # add margin totals if you want
+  kable()
+```
+
+### Exercise 6
+
+Which day of the week has the highest *percentage* of tables that are smokers? Hint: look at documentation and use google to figure out how to create table proportions.
+
+```{r}
+
+smoker_proportions <- prop.table(table(TIPS$Weekday, TIPS$Smoker), margin = 1)
+smoker_proportions
+```
+
+From this analysis we can see that Friday has the highest percentage of tables that are smokers.
+
+## Graphical Summaries
+
+Graphical summaries are a key tool in exploratory data analysis to to help you understand your data. They also help you communicate insights about your data to others. For example, we might want to display relationships about some of our categorical variables. So we could start by graphing different party sizes in our data set.
+
+```{r}
+#| fig.align: 'center'
+
+TIPS |> 
+  ggplot(aes(x = PartySize)) +
+  geom_bar()
+```
+
+Or we could explore the question about the percentage of tables that are smokers on different days of the week visually.
+
+```{r}
+#| fig.align: 'center'
+
+TIPS |> 
+  ggplot(aes(x = Weekday, fill = Smoker)) +
+    geom_bar()
+
+TIPS |> 
+  ggplot(aes(x = Weekday, fill = Smoker)) +
+    geom_bar(position = "fill")
+```
+
+We might summarize a numerical variable with a histogram. For example, here is a histogram of all of the tips in the data set.
+
+```{r}
+#| fig.align: 'center'
+
+TIPS |> 
+  ggplot(aes(x = Tip)) +
+    geom_histogram(bins = 100)
+```
+
+### Exercise 7
+
+Notice that there are a few "spikes" in the histogram above. What do you think is causing this?
+
+When tipping we usually tip 15% on a usual \$10-\$12 meal. that is why we see a spike at around 1.5 which is 15 percent of a usual meal. the other spikes could be similar. it could be a certain percentage of tip for any usual meal that may vary to \$125 meal or \$20 meal. also we see a spike at around \$1, \$2, \$5 mark which is because we usually tip the first dollar that we see in our wallet or usually give a dollar or \$2 or \$5 cash as a part of tip.
+
+We can also summarize this numerical data broken down by one of the categorical variables using boxplots, violin plots, or sina plots. Note that to create sina plots we need the `ggforce` package.
+
+```{r}
+#| fig.align: 'center'
+
+TIPS |> 
+  ggplot(aes(x=Weekday, y=Tip)) +
+  geom_boxplot() +
+  labs(title = "Tips by Day of the Week", 
+       x = "Day of the Week",
+       y = "Tips")
+
+TIPS |> 
+  ggplot(aes(x=Weekday, y=Tip)) +
+  geom_boxplot() +
+  geom_jitter() +
+  labs(title = "Tips by Day of the Week", 
+       x = "Day of the Week",
+       y = "Tips")
+
+TIPS |> 
+  ggplot(aes(x=Weekday, y=Tip)) +
+  geom_violin() +
+  labs(title = "Tips by Day of the Week", 
+       x = "Day of the Week",
+       y = "Tips")
+
+library(ggforce)
+TIPS |> 
+  ggplot(aes(x=Weekday, y=Tip)) +
+  geom_sina() +
+  labs(title = "Tips by Day of the Week", 
+       x = "Day of the Week",
+       y = "Tips")
+```
+
+Or we can visualize the relationship between a lot of our numerical variables at once.
+
+```{r}
+#| message: false
+#| fig.align: 'center'
+
+# Using pairs (only numerical allowed)
+pairs(~ Bill + TipPercentage + Tip
+    , data = TIPS
+    , main="Scatterplot Matrix for TIPS")
+
+# Using ggpairs from GGally package (preferable even though more syntax)
+library(GGally)
+TIPS |> 
+  select(Bill, TipPercentage, Tip, Weekday) |> 
+  ggpairs()
+```
+
+### Exercise 8
+
+Are there any clear linear relationships in the scatterplots above? What do you think is the explanation for these relationships?
+
+Yes, there is a linear relationship between Bill and Tip. This makes sense too because we usually tip a percentage of the total amount of bill or you tip higher with higher amount of bill. Bill and Tip has a higher correlation too of about 0.676.
+
+There are lots of other interesting graphical summaries available for interpreting and displaying data. In addition, there are lots of R packages that allow you to draw these graphics and to further customize some of the ones we discussed here. In your projects, you are welcome to use any of these that you think are appropriate.
+
+### Exercise 9
+
+State a reasonable conjecture about tipping behavior that you would like to explore in the data set. For example, you might think that people on dates tip more or that the waiter gets smaller tips when he has too many tables. Give *at least* one numerical and one graphical summary to explore this conjecture. Is there any evidence to support your conjecture?
+
+I would like to explore how tipping is affected by the days that a waiter works. i expect he or she would get more tips during weekends because that's when people go out often.
+
+```{r}
+TIPS |> 
+  group_by(Weekday) |> 
+  summarize(avg_tip = mean(Tip)) |> 
+  kable()
+```
+
+From the numerical analysis, we do see some evidence to support my conjecture. the average tip received is certainly higher than. what we waiter's receive during the weekdays. therefore, the conjecture is viable and did suggest that waiter get more tips on average during weekends.
+
+```{r}
+TIPS |> 
+  gf_boxplot(Tip ~ Weekday, data = TIPS) |>
+  gf_labs(title = "Tip by day of the week", 
+          x = "Day of the week",
+          y = "Tip")
+```
+
+The median of tips received is actually lower than Friday for Saturday but Sunday has the highest median tip received. on Saturday we see some outliers as well which could bring the average up. the tips on Saturday goes up till \$10 which is a huge tip. Therefore, this do suggest that during weekends, waiters get more tip.
+
+It's okay if your conjecture is not supported or if you are just wrong--that's often the case in exploratory data analysis.

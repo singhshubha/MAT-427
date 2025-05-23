@@ -1,0 +1,483 @@
+---
+title: "Homework 3: $K$-Nearest Neighbors"
+author: "Shea, Shifa, Shubha"
+editor: visual
+format:
+  html:
+    embed-resources: true
+---
+
+```{r setup}
+#| include: false
+
+# load packages here
+library(ggplot2)
+library(dplyr)
+library(tidymodels)
+```
+
+# Introduction
+
+In this homework, you will practice applying the $K$-Nearest Neighbors (KNN) method which is capable of performing both classification and regression. You will also practice collaborating with a team over GitHub.
+
+## Learning goals
+
+By the end of the homework, you will...
+
+-   Be able to work simultaneously with teammates on the same document using GitHub
+-   Fit and interpret KNN models in both regression and classification settings
+-   Compare and evaluate different KNN models
+
+# Getting Started
+
+In last weeks homework, you learned how to share your work using GitHub but only while working on the same document at different times. This week we will learn how to work on the same document *simultaneously*.
+
+## Teams & Rules
+
+You can find your team for this assignment on Canvas in the **People** section. The group set is called **HW3**. Your group will consist of 2-3 people and has been randomly generated. But first, some rules:
+
+1.  You and your team members should be in the same physical room for Exercises 0.1 and 0.2. After that, you are welcome to divide up the work as you see fit. Please note that most of these problems have to be done sequentially except for Exercises 10-12, which can be done apart from 1-9.
+2.  You are all responsible for understanding the work that you turn in.
+3.  In order to receive credit, each team member but make a roughly equal contribution. Since this project has 12 exercises (not including 0), each team member should commit and push at least 4 different exercises.
+4.  If you are working on the same document simultaneously, make sure to render, commit, push, and pull FREQUENTLY.
+5.  If you encounter a merge error that you don't know how to fix, contact Dr. Friedlander as soon as possible. I recommend starting this assignment early so there is time for Dr. Friedlander to help you resolve any problems before the deadline.
+
+## Clone the repo & start new RStudio project
+
+The following directions will guide you through the process of setting up your homework to work as a group.
+
+## Exercise 0.1
+
+::: {.callout-tip title="Question"}
+In your group, decide on a team name. Then have **one member of your group**:
+
+1.  [Click this link](https://classroom.github.com/a/LEbjScjp) to accept the assignment and enter your team name.
+2.  Repeat the directions for creating a project from HW 1 with the HW 3 repository.
+
+Once this is complete, the other members can do the same thing, being careful to join the already created team on GitHub classroom.
+:::
+
+## Exercise 0.2
+
+We will now learn how to collaborate on the same document at the same time by creating a **merge conflict**. You can read more about it [here](https://happygitwithr.com/pull-tricky#pull-tricky) and [here](https://happygitwithr.com/git-branches.html?q=merge#merging-a-branch).
+
+::: {.callout-tip title="Question"}
+1.  Have Members 1, 2, and 3 all create write different team names below and Render the document.
+2.  Have Member 1 add, commit, and push changes.
+3.  Have Member 2 add, commit, and push changes. This should cause an error.
+4.  Have Member 2 pull changes from the remote repo which should generate something like this: `CONFLICT (content): Merge conflict in 03-hw-knn.qmd`.
+5.  Have Member 2 open the `.qmd` file. You should see something like the third block of code in Section 22.4 of [this link](https://happygitwithr.com/git-branches.html?q=merge#merging-a-branch).
+6.  Have Member edit the document so that it has only their team name, then render, commit, and push. This should not cause an error.
+7.  Have Member 3 repeat steps 3-6.
+8.  Agree on what you want your team name to actually be and have Member 1 repeat steps 3-6.
+9.  Note that you will only generate a merge conflict if you make edits to the same line of code. If you are working on the same document simultaneously but are editing different portions, git should automatically merge for you.
+:::
+
+-   Team Name: \[she-shu-shi\]
+-   Member 1: \[Shea\]
+-   Member 2: \[Shifa\]
+-   Member 3: \[Shubha\]
+
+# $K$-Nearest Neighbors
+
+The basic idea is that predictions are made based on the $K$ observation in the training data which are "closest" to the observation that we're making a prediction for. While many different **metrics** (i.e. measures of distance) can be used, we will work exclusively with the **Euclidean metric**: $$\text{dist}(x, y) = \sqrt{\sum_{i=1}^p(x_i-y_i)^2}$$ for vectors $x = (x_1,\ldots, x_p)$ and $y = (y_1,\ldots,y_p)$.
+
+## KNN for Classification
+
+We'll start by using KNN for classification.
+
+## Data
+
+We will be working with the famous `iris` data set which consists of four measurements (in centimeters) for 150 plants belonging to three species of iris. This data set was first published in a classic 1936 paper by English statistician, and notable racist/eugenicist, Ronald Fisher. In that paper, multivariate linear models were applied to classify these plants. Of course, back then, model fitting was an extremely laborious process that was done without the aid of calculators or statistical software.
+
+## Exercise 1
+
+::: {.callout-tip title="Question"}
+Import the `datasets` package, take a look at the columns of `iris`, and split your data into training and test sets using a 70-30 split. IMPORTANT: Make sure that each species is represented proportionally in the training set by using the `strata` argument in the `initial_split` function! Once again, set your seed to 427.
+:::
+
+```{r}
+library("datasets")
+library("tidymodels")
+
+set.seed(427)
+
+iris_split <- initial_split(iris, prop = .7, strata = Species)
+
+
+iris_split
+iris_train <- training(iris_split)
+iris_test <- testing(iris_split)
+
+# iris_train
+# iris_test
+# data(iris)
+# summary(iris)
+```
+
+## Exercise 2
+
+::: {.callout-tip title="Question"}
+Create a scatter plot of your training set with `Sepal.Width` and `Petal.Width` on the x- and y- axes, respectively, and color the points by `Species`.
+:::
+
+```{r}
+ggplot(iris_train, aes(x = Sepal.Width, y = Petal.Width, color = Species)) +
+  geom_point() +
+  labs(
+    title = "Scatter Plot of Sepal Width vs Petal Width",
+    x = "Sepal Width",
+    y = "Petal Width"
+  ) +
+  theme_minimal()
+
+```
+
+## Exercise 3
+
+::: {.callout-tip title="Question"}
+As the name suggests, the $K$-nearest neighbors (KNN) method classifies a point based on the classification of the observations in the training set that are nearest to that point. If $k > 1$, then the neighbors essentially "vote" on the classification of the point. Using only your graph, if $k = 1$, how would KNN classify a flower that had sepal width 3cm and petal width 1cm?
+:::
+
+-   Setosa tends to have smaller petal widths, mostly closer to 1cm.
+
+-   Versicolor and Virginica have larger petal widths.
+
+-   A point at (3,1) looks closest to Versicolor.
+
+## Exercise 4
+
+::: {.callout-tip title="Question"}
+Just to verify that we are correct, find the sepal width, petal width, and species of the observation in your training set that is closest to our flower with sepal width 3cm and petal width 1cm. This should be done by computing the Euclidean distance of (3, 1) to each observation and then sorting the resulting tibble to get the row with the smallest distance. Don't worry about normalizaing the data.
+:::
+
+```{r}
+
+new_flower <- c(3, 1)
+
+iris_train_check <- iris_train |>
+  mutate(distance = sqrt((Sepal.Width - new_flower[1])^2 + (Petal.Width - new_flower[2])^2))
+
+closest_observation <- iris_train_check |>
+  arrange(distance) |>
+  slice(1) |>
+  select(Sepal.Width, Petal.Width, Species, distance)
+
+print(closest_observation)
+```
+
+## Exercise 5
+
+::: {.callout-tip title="Question"}
+Create a `recipe` to center and scale your data sets using the mean and standard deviation from your training set.
+:::
+
+```{r}
+
+recipe_train <- recipe(Species ~ ., data = iris_train) |>
+  step_center(all_predictors()) |>
+  step_scale(all_predictors())
+
+#prepare the recipe
+prepped_train_recipe <- prep(recipe_train, training = iris_train)
+
+# applying to training set
+iris_train_prepped <- bake(prepped_train_recipe, new_data = iris_train)
+
+iris_train_prepped
+
+```
+
+## Exercise 6
+
+::: {.callout-tip title="Question"}
+Create a `workflow` to fit a KNN model that uses `weight_func = "rectangular"` with 1 neighbor that includes the recipe above and fit the model to your training set.
+:::
+
+```{r}
+knn1model <- nearest_neighbor(mode = "classification",
+                          engine = "kknn",
+                          neighbors = 1,
+                          weight_func = "rectangular")
+
+knn1_fit <- workflow() |>
+  add_model(knn1model) |>
+  add_recipe(recipe_train) |>
+  fit(data = iris_train_prepped)
+
+knn1_fit
+```
+
+We would like to understand how the method of $K$-nearest neighbors will classify points in the plane. That is, we would like to view the *decision boundaries* of this model. To do this, we will use our model to classify a large grid of points in the plane, and color them by their classification. The code below creates a data frame called `grid` consisting of `r 250^2` points in the plane.
+
+```{r}
+ g1 <- rep((200:450)*(1/100), 250)
+ g2 <- rep((0:250)*(1/100), each = 250)
+ grid <- tibble(Sepal.Width = g1, Petal.Width = g2)
+ grid
+```
+
+## Exercise 7
+
+::: {.callout-tip title="Question"}
+Uncomment the code above, and change the variable names so that it will work with your model. Classify the points in `grid` using your training data and $k = 1$. Then, plot the points in `grid` colored by their classification. Make sure your code is written so that the grid points are being centered and scaled before predictions are being made for them.
+:::
+
+```{r}
+#mean values
+grid_filled <- grid |> 
+  mutate(Sepal.Length = mean(iris_train$Sepal.Length), 
+         Petal.Length = mean(iris_train$Petal.Length))
+
+#applying the same scaling
+grid_prepped <- bake(prepped_train_recipe, new_data = grid_filled)
+
+#predict classes for the grid points
+grid_predictions <- predict(knn1_fit, new_data = grid_prepped)
+
+#Combine predictions with the grid
+grid_with_predictions <- bind_cols(grid, grid_predictions)
+
+```
+
+```{r}
+
+#ploting decision boundaries
+ggplot(grid_with_predictions, aes(x = Sepal.Width, y = Petal.Width, color = .pred_class)) +
+  geom_point(size = 1) +
+  labs(title = "KNN Decision Boundaries",
+       x = "Sepal Width",
+       y = "Petal Width",
+       color = "Predicted Species") +
+  theme_minimal()
+
+```
+
+## Exercise 8
+
+::: {.callout-tip title="Question"}
+Notice that the decision boundary between `versicolor` and `virginica` looks a little strange. What do you observe? Why do you think this is happening? Does using $k = 2$ make things better or worse? Why do you think that is?
+:::
+
+-   The boundary looks irregular, most likely due to k=1 since every point is classified based solely on its nearest neighbor.
+
+-   The boundary's very sensitive to noise where small fluctuations in the training data can lead to it being non-smooth and irregular. This classifies as model over-fitting.
+
+-   When k=2, we would expect the boundary to be smoother and less irregular since instead of just one nearest neighbor, the classification decision will be based on two.
+
+## Exercise 9
+
+::: {.callout-tip title="Question"}
+Determine which value of $k$, the number of neighbors selected, gives the highest accuracy on the test set. Test all $k$s between 1 and 40. Note that there may be ties because our data set is a little bit too small. To break ties just choose the smallest $k$ among the ones which are tied. Hint: A for loop may be helpful. What is the accuracy of the model you ended up choosing?
+:::
+
+```{r}
+set.seed(427)
+
+k_values <- 1:40
+
+knn_results <- tibble(k = integer(), Accuracy = numeric())
+
+for (k in k_values) {
+  
+  knn_model <- nearest_neighbor(
+    mode = "classification",
+    neighbors = k
+  ) |>
+    set_engine("kknn") |>
+    fit(Species ~ Sepal.Width + Petal.Width, data = iris_train)
+  
+  predictions <- predict(knn_model, new_data = iris_test) |>
+    bind_cols(iris_test)
+  
+  accuracy <- mean(predictions$.pred_class == predictions$Species)
+  
+  knn_results <- bind_rows(knn_results, tibble(k = k, Accuracy = accuracy))
+}
+
+best_k <- knn_results |>
+  filter(Accuracy == max(Accuracy)) |>
+  slice_min(k) |> 
+  pull(k)
+
+best_accuracy <- max(knn_results$Accuracy)
+
+best_k
+best_accuracy
+```
+
+Awesome!! Your model probably did pretty well, because KNN performs really well on the `iris` data set. However, this isn't a very challenging data set for most classification methods. More challenging data sets have data on different scales and *class imbalance* where there are very few observations belonging to a particular class.
+
+# KNN for Regression
+
+For regression, we can predict the response variable for our point to be the average (or sometimes median) of the response variable for the $K$-nearest neighbors.
+
+## Data & Dummy Variables
+
+For this portion of the homework, we'll use the `Carseat` data from the `ISLR2` package. Frequently, when working with categorical data, you will be required to transform that data into **dummy variables**. Namely, you'll create a unique variable for each column which gets a 1 if the corresponding observation is from that category and a 0 otherwise. In data science, this format is sometimes referred to as **one-hot encoding**.
+
+## Exercise 10
+
+::: {.callout-tip title="Question"}
+Look at the `Carseat` data from the `ISLR2` package. Then, split the data into a training and test set using a 70-30 split and a seed of 427 (as usual).
+:::
+
+```{r}
+library("ISLR2")
+
+set.seed(427)
+
+car_split <- initial_split(Carseats, prop = .7)
+
+car_split
+glimpse(car_split)
+car_train <- training(car_split)
+car_test <- testing(car_split)
+
+
+```
+
+## Exercise 11
+
+::: {.callout-tip title="Question"}
+Create a recipe which first, converts all categorical variables into dummy variables using `step_dummy()` then centers and scales all of the predictors based on the training data.
+:::
+
+```{r}
+library(knitr)
+carseat_folds <- vfold_cv(data = car_train, v = 10)
+
+car_rec_preproc <- recipe(Sales ~ .,data=car_train) |>
+  step_unknown() |>
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) |>
+  step_zv(all_predictors()) |>
+  step_normalize(all_predictors())
+```
+
+## Exercise 12
+
+::: {.callout-tip title="Question"}
+Fit a KNN model to predict `Sales` from the data we have. Fit your model on the training data and use the test set to choose the appropriate variables and the number of neighbors to include. You may find it useful to plot the $R^2$ and RMSE against the number of neighbors you include in your model. You may find that the RMSE and $R^2$ disagree on what the best model is. You will have to make a judgement call on which model is "best". One thing that can be helpful is looking at plots of your target variables (`Sales` in this case) against the model residuals.
+:::
+
+```{r}
+library(class)
+set.seed(427)
+
+
+
+# l = list()
+# 
+# for (k in (1:10)){
+#   
+#   knn_m <- nearest_neighbor(neighbors = k) |>
+#     set_engine("kknn") |>
+#     set_mode("regression")
+#   knn_mwf <- workflow() |> add_model(knn_m) |> add_recipe(car_rec_preproc)
+#   
+#   append(l,knn_mwf)
+#   
+#   knn_mwf
+# }
+
+
+
+knn1_m <- nearest_neighbor(neighbors = 1) |>
+    set_engine("kknn") |>
+    set_mode("regression")
+  knn_mwf1 <- workflow() |> add_model(knn1_m) |> add_recipe(car_rec_preproc)
+
+knn2_m <- nearest_neighbor(neighbors = 2) |>
+    set_engine("kknn") |>
+    set_mode("regression")
+  knn_mwf2 <- workflow() |> add_model(knn2_m) |> add_recipe(car_rec_preproc)
+  
+knn3_m <- nearest_neighbor(neighbors = 3) |>
+    set_engine("kknn") |>
+    set_mode("regression")
+  knn_mwf3 <- workflow() |> add_model(knn3_m) |> add_recipe(car_rec_preproc)
+
+knn4_m <- nearest_neighbor(neighbors = 4) |>
+    set_engine("kknn") |>
+    set_mode("regression")
+  knn_mwf4 <- workflow() |> add_model(knn4_m) |> add_recipe(car_rec_preproc)
+  
+knn5_m <- nearest_neighbor(neighbors = 5) |>
+    set_engine("kknn") |>
+    set_mode("regression")
+  knn_mwf5 <- workflow() |> add_model(knn5_m) |> add_recipe(car_rec_preproc)
+  
+knn6_m <- nearest_neighbor(neighbors = 6) |>
+    set_engine("kknn") |>
+    set_mode("regression")
+  knn_mwf6 <- workflow() |> add_model(knn6_m) |> add_recipe(car_rec_preproc)
+  
+knn7_m <- nearest_neighbor(neighbors = 7) |>
+    set_engine("kknn") |>
+    set_mode("regression")
+  knn_mwf7 <- workflow() |> add_model(knn7_m) |> add_recipe(car_rec_preproc)
+  
+knn8_m <- nearest_neighbor(neighbors = 8) |>
+    set_engine("kknn") |>
+    set_mode("regression")
+  knn_mwf8 <- workflow() |> add_model(knn8_m) |> add_recipe(car_rec_preproc)
+  
+knn9_m <- nearest_neighbor(neighbors = 9) |>
+    set_engine("kknn") |>
+    set_mode("regression")
+  knn_mwf9 <- workflow() |> add_model(knn9_m) |> add_recipe(car_rec_preproc)
+  
+knn10_m <- nearest_neighbor(neighbors = 10) |>
+    set_engine("kknn") |>
+    set_mode("regression")
+  knn_mwf10 <- workflow() |> add_model(knn10_m) |> add_recipe(car_rec_preproc)
+
+
+carseat_metric <- metric_set(rmse,rsq)
+
+
+knn_1res <- knn_mwf1 |> fit_resamples(resamples = carseat_folds, metrics = carseat_metric)
+
+knn_2res <- knn_mwf2 |> fit_resamples(resample = carseat_folds, metrics = carseat_metric)
+
+knn_3res <- knn_mwf3 |> fit_resamples(resample = carseat_folds, metrics = carseat_metric)
+
+knn_4res <- knn_mwf4 |> fit_resamples(resample = carseat_folds, metrics = carseat_metric)
+
+knn_5res <- knn_mwf5 |> fit_resamples(resample = carseat_folds, metrics = carseat_metric)
+
+knn_6res <- knn_mwf6 |> fit_resamples(resample = carseat_folds, metrics = carseat_metric)
+
+knn_7res <- knn_mwf7 |> fit_resamples(resample = carseat_folds, metrics = carseat_metric)
+
+knn_8res <- knn_mwf8 |> fit_resamples(resample = carseat_folds, metrics = carseat_metric)
+
+knn_9res <- knn_mwf9 |> fit_resamples(resample = carseat_folds, metrics = carseat_metric)
+
+knn_10res <- knn_mwf10 |> fit_resamples(resample = carseat_folds, metrics = carseat_metric)
+
+#had to start from 0 because the way the graph groups "workflow#" differently from "workflow##" 
+
+m1 <- collect_metrics(knn_1res) |> mutate(workflow = "Workflow0")
+m2 <- collect_metrics(knn_2res) |> mutate(workflow = "Workflow1")
+m3 <- collect_metrics(knn_3res) |> mutate(workflow = "Workflow2")
+m4 <- collect_metrics(knn_4res) |> mutate(workflow = "Workflow3")
+m5 <- collect_metrics(knn_5res) |> mutate(workflow = "Workflow4")
+m6 <- collect_metrics(knn_6res) |> mutate(workflow = "Workflow5")
+m7 <- collect_metrics(knn_7res) |> mutate(workflow = "Workflow6")
+m8 <- collect_metrics(knn_8res) |> mutate(workflow = "Workflow7")
+m9 <- collect_metrics(knn_9res) |> mutate(workflow = "Workflow8")
+m10 <- collect_metrics(knn_10res) |> mutate(workflow = "Workflow9")
+```
+
+```{r}
+all_metric <- bind_rows(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10)
+all_metric
+
+ggplot(all_metric, aes(x =.config, y = mean, color = workflow)) + geom_tile()
+ggplot(all_metric, aes(x =.config, y = mean, color = workflow)) + geom_boxplot()
+```
+
+For the graphs the higher values on the y-axis(mean) are RMSE and the lower values are R\^2. I.E workflow 9 for example, has the lowest RMSE but the highest R\^2 values.
+
+I think that workflow 9 has the best results as it has the highest r\^2 value but the lowest RMSE value.

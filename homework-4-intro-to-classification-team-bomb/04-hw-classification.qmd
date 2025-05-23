@@ -1,0 +1,441 @@
+---
+title: "Homework 4: Intro to Classification"
+author: "Shubha"
+editor: visual
+format:
+  html:
+    embed-resources: true
+---
+
+```{r setup, include=FALSE}
+# load packages here
+library(readr)
+library(dplyr)
+library(tidyverse)
+library(tidymodels)
+library(ggplot2)
+library(pROC)
+
+```
+
+# Introduction
+
+In this homework we will focus on **classification**. That is when the response variable is categorical. We'll be on predicting a **binary** response variable, which is a categorical variable with only two possible outcomes. You will also practice collaborating with teams using GitHub.
+
+## Learning goals
+
+By the end of the homework, you will...
+
+-   Be able to work create and merge branches in GitHub
+-   Fit and interpret logistic regression models
+-   Fit and evaluation binary classification models
+
+# Getting Started
+
+In last weeks homework, you learned how to share your work using GitHub and to resolve merge conflicts. This week you'll learn about how to create and merge branches.
+
+## Teams & Rules
+
+You can find your team for this assignment on Canvas in the **People** section. The group set is called **HW4**. Your group will consist of 2-3 people and has been randomly generated. But first, some rules:
+
+1.  At the start of your homework, you and your team members should be in the same physical room for Exercise 0.1.
+2.  Exercise 0.2 will teach your how to create your own branch. Each team member will create their own branch and complete the homework themselves. Note that I'll be able to see all of your commit so I'll know if you didn't do this.
+3.  Once everyone is finished, you and your team members should get together in the same room again to Complete Exercise 0.3 which will teach you how to merge your branches together and decide on the best version of each question.
+
+As always:
+
+4.  You are all responsible for understanding the work that you turn in.
+5.  If you encounter a merge error that you don't know how to fix, contact Dr. Friedlander as soon as possible. I recommend starting this assignment early so there is time for Dr. Friedlander to help you resolve any problems before the deadline.
+
+## Clone the repo, create your own branch, & merging
+
+The following directions will guide you through the process of setting up your homework to work as a group.
+
+## Exercise 0.1
+
+::: {.callout-tip title="Question"}
+In your group, decide on a team name. Then have **one member of your group**:
+
+1.  [Click this link](https://classroom.github.com/a/SXdGfP0m) to accept the assignment and enter your team name.
+2.  Repeat the directions for creating a project from HW 1 with the HW 4 repository.
+
+Once this is complete, the other members can do the same thing, being careful to join the already created team on GitHub classroom.
+:::
+
+## Exercise 0.2
+
+We will now learn how to create branches and run git from the [command line](https://neuraldatascience.io/2-nds/terminal.html). Each team member will create their own branch and complete a version of their homework.
+
+::: {.callout-tip title="Question"}
+1.  Click on the "Terminal" tab right next to the "Console" tab in the bottom left of RStudio. This is a "bash terminal". You run "bash scripts" here rather than R code.
+2.  Create your own branch by typing `git checkout -b banch_name` where `branch_name` is whatever you want to name your branch. Typing `git` tells the terminal that you want to run a `git` command, `checkout` is a git command that will switch you to a different branch, the `-b` option will create a new branch for you. If you want to switch between existing branches leave out `-b`.
+3.  Put your name in one of the slots below and render your document.
+4.  Stage your changes by typing `git add .`. Think of this like clicking the check boxes in the top right screen. If you don't want to stage ALL of the changes you can type `git add filename` where `filename` corresponds to the files you want to stage. `.` will simply stage all changes.
+5.  Commit your changes by typing `git commit -m "insert commit message"` where you replace `insert commit message` with your actual commit message. This will commit your changes.
+6.  To push your changes to GitHub, type `git push`.
+7.  If you ever want to pull your changes you can type `git pull`.
+8.  If all group members are working different branches you shouldn't encounter any merge conflicts.
+:::
+
+-   Team Name: Team Bomb
+-   Member 1: Shubha Singh
+-   Member 2: \[Insert Name\]
+-   Member 3: \[Insert Name/Delete line if you only have two members\]
+
+## Exercise 0.3
+
+::: callout-warning
+Skip this exercise until everyone has finished the homework. Test 1
+:::
+
+::: {.callout-tip title="Question"}
+1.  Read the warning above!
+2.  (DO NOT SKIP) Go through all of the questions together, discussing each others solutions to get a good idea of what you want the final submission to look like.
+3.  On any computer, type `git checkout main`. This will move you into your main branch.
+4.  Type `git merge name_of_branch_you_want_to_merge` where `name_of_branch_you_want_to_merge` is the name of the branch you want to merge into `main`.
+5.  Do this for each team members branch. Each time you will likely get a merge-conflict that you need to resolve. Resolve them in the same way you did for the previous homework.
+:::
+
+# Logistic Regression
+
+For our first classification method, we will use a type of **generalized linear model** called a **logistic regression model**. If we have a **Binomial random variable**, a random variable with just two possible outcomes (0 or 1), logistic regression gives us the probability that each outcome occurs based on some predictor variables $X$. Whereas, for linear regression, we were estimating models of the form, $$Y = \beta_0 + \beta_1\times X_1 + \beta_2\times X_2$$ the form of the a logistic regression equation is
+
+$$P(Y = 1 | X)  = \dfrac{e^{\beta_0 + \beta_1\times X_1 + \beta_2\times X_2}}{1 + e^{\beta_0 + \beta_1\times X_1 + \beta_2\times X_2}}.$$ In other words, this function gives us the probability that the outcome variable $Y$ belongs to category 1 given particular values for the predictor variables $X_1$ and $X_2$. Notice that the function above will always be between 0 and 1 for any values of $\beta$ and $X$, which is what allows us to interpret this as a probability. Of course, the probability that the outcome variable is equal to 0 is just $1 - P(Y = 1 | X)$. Rearranging the formula above, we have
+
+$$\log \left (\dfrac{P(Y = 1 | X) }{1 - P(Y = 1 | X) } \right ) = \beta_0 + \beta_1X_1 + \beta_2X_2$$
+
+and we see why logistic regression is considered a type of generalized **linear** regression. The quantity on the left is called the **log-odds** or **logit**, and so logistic regression models the log-odds as a linear function of the predictor variable. The coefficients are chosen via the **maximum likelihood criterion**, which you can read more about in Section 12.2 of APM and Section 4.3.2 ISLR if you would like. I recommend learning more about **maximum likelihood estimators** at some point when you have the chance.
+
+# Our Data
+
+In this homework, we will practice applying logistic regression by working with the data set `haberman.data`. The dataset contains cases from a study that was conducted between 1958 and 1970 at the University of Chicago's Billings Hospital on the survival of patients who had undergone surgery for breast cancer. More information about the data set is included in the file `haberman.names`. We'll be trying to predict whether a patient survived after undergoing surgery for breast cancer.
+
+## Exercise 1
+
+::: {.callout-tip title="Question"}
+-   Load the data set into R using the `read_csv` function. The `haberman.data` file does not contain column names so you will need to use the `col_names` argument to specify them yourself. Choose sensible names based on the information in `haberman.names`.
+-   Convert the Survival Status variable into a factor, giving appropriate names (i.e. not numbers) to each category.
+-   Give a brief summary of the data set containing any information you feel would be important.
+-   Split the data into a training and test set. Use a 60-40 split. Once again, please set your seed to 427.
+:::
+
+```{r}
+
+
+haberman <- read_csv("haberman.data", col_names = c("Age", "Year", "Nodes", "Survival_Status"))
+
+# Convert Survival_Status into a factor
+haberman$Survival_Status <- factor(haberman$Survival_Status, 
+                                   levels = c( 2, 1), 
+                                   labels = c("Died","Survived" ))
+haberman$Year <- haberman$Year + 1900
+
+summary(haberman)
+set.seed(427)
+haberman_split <- initial_split(haberman, prop = 0.60, strata = Survival_Status)
+# Extract training and testing sets
+haberman_train <- training(haberman_split)
+haberman_test  <- testing(haberman_split)
+
+
+```
+
+The dataset shows that the majority of patients are middle-aged (median age = 52), and many had only a few positive nodes (median of 1 node). Most patients survived (73.5%), while 26.5% died within 5 years. The max amount of nodes is 52 which is very high compared to our median data. And most of the people survived (225).
+
+I also added 1900 to every year so ti is easier to read the dataset.
+
+# Fitting Our First Logistic Regression model
+
+## Exercise 2
+
+::: {.callout-tip title="Question"}
+Using the data from your training set build a logistic regression model to predict whether or not a patient will survive based only on the number of axillary nodes detected. The same summary and `broom` functions will work for exploring your logistic model. Does the probability of survival increase or decrease with the number of nodes detected?
+:::
+
+```{r}
+logistic_model <- glm(Survival_Status ~ Nodes, data = haberman_train, family = binomial)
+
+summary(logistic_model)
+
+```
+
+Since the coefficient of nodes is negative, It indicates that as we increase the number of nodes, the chances of survival decreases.\
+We may have to look at other other factors as well to get a guarantee answer but for now, as the number of nodes increases, the chances of survival decreases.
+
+## Exercise 3
+
+::: {.callout-tip title="Question"}
+Use the `predict` function to evaluate your model on the integers from 0 to 50. Create a plot with the integers from 0 to 50 on the x-axis and the predicted probabilities on the y-axis. Based on this image, estimate the input that would be needed to give an output of 0.75. What does this mean in the context of the model? **Note.** To use `predict` the `new_data` must be a `tibble` where the columns have the same names as the those in the data frame you used to train your model.
+:::
+
+```{r}
+nodes_df <- tibble(Nodes = 0:50)
+
+# Predict probabilities using the logistic regression model
+predicted_probabilities <- predict(logistic_model, newdata = nodes_df, type = "response")
+
+# Add predicted probabilities to the data frame
+nodes_df$Predicted_Probabilities <- predicted_probabilities
+
+# Plot the predicted probabilities
+ggplot(nodes_df, aes(x = Nodes, y = Predicted_Probabilities)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Number of Nodes", y = "Predicted Probability of Survival", 
+       title = "Predicted Probability of Survival vs. Number of Nodes") +
+  theme_minimal()
+
+```
+
+Based on the graph, to get an output of 0.75 we need about 5 nodes. This means a patient with 5 nodes, the model predicts that his survival rate is about 75%.
+
+# Classifiction Using a Logistic Regression Model
+
+For a classification problem, we want a prediction of which class the outcome variable belongs to. Notice that the outputs of your logistic regression model are *probabilities*. We need to translate these into classifications. In order to get a prediction from a binomial logistic regression model, we define a **threshold**. If the output of the model is above the threshold, then we predict class 1, and if it is below the threshold we predict class 0.
+
+## Exericse 4
+
+::: {.callout-tip title="Question"}
+-   For the rest of the homework, treat the patient dying as our "Positive" class.
+-   Using a threshold value of 0.5, obtain a vector of class predictions for the test data set (the `if_else` function might be useful here). You need not display it.
+-   Construct a confusion matrix.
+-   Using the numbers from your confusion matrix (i.e. without using functions from yardstick) compute the following:
+    -   Accuracy
+    -   Precision
+    -   Recall
+    -   Specificity
+    -   Negative Predictive Value
+:::
+
+```{r}
+test_probabilities <- predict(logistic_model, newdata = haberman_test, type = "response")
+test_predictions <- if_else(test_probabilities > 0.5, "Died", "Survived")
+
+#confusion matrix
+confusion_matrix <- table(Predicted = test_predictions, Actual = haberman_test$Survival_Status)
+
+
+# Calculate metrics
+true_positive <- confusion_matrix["Died", "Died"]
+true_negative <- confusion_matrix["Survived", "Survived"]
+false_positive <- confusion_matrix["Died", "Survived"]
+false_negative <- confusion_matrix["Survived", "Died"]
+
+accuracy <- (true_positive + true_negative) / sum(confusion_matrix)
+precision <- true_positive / (true_positive + false_positive)
+recall <- true_positive / (true_positive + false_negative)
+specificity <- true_negative / (true_negative + false_positive)
+negative_predictive_value <- true_negative / (true_negative + false_negative)
+
+# Print the metrics
+cat("Accuracy:", accuracy, "\n")
+cat("Precision:", precision, "\n")
+cat("Recall:", recall, "\n")
+cat("Specificity:", specificity, "\n")
+cat("Negative Predictive Value:", negative_predictive_value, "\n")
+```
+
+## Baseline Model
+
+Now, we may be asking ourselves, "Is this a good accuracy?" and the answer is, as always, "It depends on your data and the goals of your analysis!". The question below illustrates some of the nuances of using accuracy as a performance metric.
+
+## Exercise 5
+
+::: {.callout-tip title="Question"}
+Suppose you decided to create a super simple model and just predict that everyone survives. What would the accuracy on the training set be? Note that you should not need to use construct a confusion matrix to answer this question.
+:::
+
+```{r}
+num_survived <- sum(haberman_train$Survival_Status == "Survived")
+total_patients <- nrow(haberman_train)
+
+# Calculate the accuracy
+baseline_accuracy <- num_survived / total_patients
+baseline_accuracy
+```
+
+Perhaps we shouldn't be so excited about the accuracy obtained in question 4! Accuracy is a good metric but it isn't perfect and suffers in situations where our classes are unbalanced.
+
+## Exercise 6
+
+::: {.callout-tip title="Question"}
+A threshold of 0.5 isn't necessarily the best choice for the threshold. Write out a for-loop to test every threshold between 0 and 1 (increase by steps of 0.01). Create a single line-plot with the the threshold on the x-axis and the following on the y-axis: - accuracy - recall - precision You may use any `parsnip` functions you like. Hint: you should NOT be fitting any models here.
+:::
+
+```{r}
+
+# Initialize vectors to store the metrics
+thresholds <- seq(0, 1, by = 0.01)
+accuracy_vec <- numeric(length(thresholds))
+precision_vec <- numeric(length(thresholds))
+recall_vec <- numeric(length(thresholds))
+
+# Loop through each threshold
+for (i in seq_along(thresholds)) {
+  threshold <- thresholds[i]
+  
+  # Classify based on the current threshold
+  test_predictions <- if_else(test_probabilities > threshold, "Died", "Survived")
+  
+  # Create a confusion matrix
+  confusion_matrix <- table(Predicted = test_predictions, Actual = haberman_test$Survival_Status)
+  
+  # Initialize metrics
+  true_positive <- 0
+  true_negative <- 0
+  false_positive <- 0
+  false_negative <- 0
+  
+  # Check if categories exist in the confusion matrix
+  if ("Died" %in% rownames(confusion_matrix) && "Died" %in% colnames(confusion_matrix)) {
+    true_positive <- confusion_matrix["Died", "Died"]
+  }
+  if ("Survived" %in% rownames(confusion_matrix) && "Survived" %in% colnames(confusion_matrix)) {
+    true_negative <- confusion_matrix["Survived", "Survived"]
+  }
+  if ("Died" %in% rownames(confusion_matrix) && "Survived" %in% colnames(confusion_matrix)) {
+    false_positive <- confusion_matrix["Died", "Survived"]
+  }
+  if ("Survived" %in% rownames(confusion_matrix) && "Died" %in% colnames(confusion_matrix)) {
+    false_negative <- confusion_matrix["Survived", "Died"]
+  }
+  
+  # Calculate metrics
+  accuracy_vec[i] <- (true_positive + true_negative) / sum(confusion_matrix)
+  precision_vec[i] <- ifelse((true_positive + false_positive) > 0, true_positive / (true_positive + false_positive), NA)
+  recall_vec[i] <- ifelse((true_positive + false_negative) > 0, true_positive / (true_positive + false_negative), NA)
+}
+
+# Create a data frame for plotting
+metrics_df <- tibble(
+  Threshold = thresholds,
+  Accuracy = accuracy_vec,
+  Precision = precision_vec,
+  Recall = recall_vec
+)
+
+# Plot the metrics
+ggplot(metrics_df, aes(x = Threshold)) +
+  geom_line(aes(y = Accuracy, color = "Accuracy")) +
+  geom_line(aes(y = Precision, color = "Precision")) +
+  geom_line(aes(y = Recall, color = "Recall")) +
+  labs(x = "Threshold", y = "Metric Value", 
+       title = "Metrics vs. Threshold",
+       color = "Metric") +
+  theme_minimal()
+```
+
+# ROC and AUC
+
+Let's move on to a different method of measuring performance called a **Receiver Operating Curve** or **ROC** curve. Note that ROC curves can only be constructed when our target variable only has two classes. Let's first think about a few quantities:
+
+-   **true-positive rate**: the proportion of 1's which are correctly classified as 1's, sometimes referred to as the **sensitivity** or **recall**.
+-   **false-positive rate**: the proportion of 0's which are incorrectly classified as 1's. One minus the false-positive rate is a quantity called the **specificity**
+
+As we tune our threshold above, we are changing the true-positive and false-positive rates. The higher our threshold, the fewer observations get classified as positive and so the true-positive rate will decrease and the false-positive rate will decrease. As a result, we can view the true-positive rate as a function of the false-positive rate. Plotting this function results in an ROC curve.
+
+The more the curve looks like its being sucked into the top left corner, the better your model is. In fact, we can compute the area under this ROC curve to get a performance metric called **AUC** which you can use to evaluate your model. The nice thing about ROC curves and the AUC metric is that they are insensitive to class sizes so they can be used when you have unbalanced classes.
+
+## Exercise 7
+
+::: {.callout-tip title="Question"}
+Produce an ROC curve and AUC statistic on the test set. Try to add your AUC to your plot. Comment on your results.
+:::
+
+```{r}
+roc_curve <- roc(haberman_test$Survival_Status, test_probabilities, levels = c("Survived", "Died"))
+
+# Plot the ROC curve
+plot(roc_curve, main = "ROC Curve for Logistic Regression Model")
+
+# Calculate the AUC value
+auc_value <- auc(roc_curve)
+auc_value
+```
+
+The AUC value: 0.7104 (Area under the curve)
+
+# Final Challenge
+
+## Exercise 8
+
+::: {.callout-tip title="Question"}
+Kaggle is a website that runs a variety of data science competitions. Read about the framingham heart study and the associated data set [here](https://www.kaggle.com/datasets/dileep070/heart-disease-prediction-using-logistic-regression). Please stop reading at the section entitled "logistic regression" as this will spoil the fun of analyzing this data set. Since you have to create an account to download data off of Kaggle I've included a csv in the assignment repository. Create the best model that you can. Best model get's a high five from Dr. Friedlander. Note, split your data into a train, and test sets using the seed 10520.
+:::
+
+```{r}
+framingham <- read_csv("framingham.csv")
+
+# Split data into training and testing sets
+set.seed(10520)
+framingham_split <- initial_split(framingham, prop = 0.70, strata = TenYearCHD)
+framingham_train <- training(framingham_split)
+framingham_test  <- testing(framingham_split)
+
+
+```
+
+### Model 1
+
+```{r}
+set.seed(10520)
+model <- glm(TenYearCHD ~ age + male + cigsPerDay + totChol + sysBP + diaBP + BMI + heartRate + glucose, data = framingham_train, family = binomial)
+summary(model)
+
+
+
+test_probabilities <- predict(model, newdata = framingham_test, type = "response")
+test_predictions <- if_else(test_probabilities > 0.5, "1", "0")
+
+# Confusion matrix
+confusion_matrix <- table(Predicted = test_predictions, Actual = framingham_test$TenYearCHD)
+
+# Calculate metrics
+true_positive <- confusion_matrix["1", "1"]
+true_negative <- confusion_matrix["0", "0"]
+false_positive <- confusion_matrix["1", "0"]
+false_negative <- confusion_matrix["0", "1"]
+
+accuracy <- (true_positive + true_negative) / sum(confusion_matrix)
+precision <- true_positive / (true_positive + false_positive)
+recall <- true_positive / (true_positive + false_negative)
+specificity <- true_negative / (true_negative + false_positive)
+negative_predictive_value <- true_negative / (true_negative + false_negative)
+
+# Print the metrics
+cat("Accuracy:", accuracy, "\n")
+cat("Precision:", precision, "\n")
+cat("Recall:", recall, "\n")
+cat("Specificity:", specificity, "\n")
+cat("Negative Predictive Value:", negative_predictive_value, "\n")
+```
+
+### Model 2
+
+```{r}
+set.seed(10520)
+model2 <- glm(TenYearCHD ~ age + male + cigsPerDay + totChol + sysBP + diaBP + BMI + heartRate + glucose + currentSmoker + BPMeds + prevalentStroke + prevalentHyp + diabetes + education, data = framingham_train, family = binomial)
+summary(model2)
+
+
+
+predictions <- predict(model2, framingham_test, type = "response")
+
+# Convert probabilities to binary outcomes
+predicted_classes <- ifelse(predictions > 0.5, 1, 0)
+
+# Calculate accuracy
+accuracy <- mean(predicted_classes == framingham_test$TenYearCHD)
+print(paste("Accuracy:", accuracy))
+
+# Confusion matrix
+confusionMatrix <- table(Predicted = predicted_classes, Actual = framingham_test$TenYearCHD)
+print(confusionMatrix)
+
+# Classification report
+library(caret)
+report <- confusionMatrix(as.factor(predicted_classes), as.factor(framingham_test$TenYearCHD))
+print(report)
+```
+
+The two models that are provide have similar values. Model 2 has slightly larger accuracy than model 1. Model 2 also has higher specificity, correctly identifying true negatives. After comparing these two model, model 2 might be more favorable than model 1.

@@ -1,0 +1,377 @@
+---
+title: "Hack-a-thon"
+author: "Shubha Swarnim Singh"
+format:
+  html:
+    embed-resources: true
+editor: visual
+
+
+
+execute:
+  error: false
+  warning: false
+---
+
+
+
+## Introduction
+
+The U.S. Census plays a vital role in shaping national policy by determining congressional representation and directing the allocation of hundreds of billions in federal funding. While the Constitution mandates only an enumeration of the population every ten years, modern censuses now gather extensive demographic data to support data-driven decision-making across government and industry.
+
+In this project, we use data from the U.S. Census to build a predictive model that determines whether an individual earns more than \$50,000 annually. Using a training dataset containing demographic and economic features for 35,000 individuals, we develop and evaluate a classification model capable of generalizing to new data.
+
+**`The ultimate goal is to generate accurate predictions on a separate test dataset of 13,840 individuals whose income labels are hidden.`**
+
+This project involves a full machine learning pipeline, including data cleaning, preprocessing (especially for categorical variables and missing values), feature engineering, model training, validation, and prediction. The final deliverables include this HTML report detailing our modeling process and rationale, and a CSV file containing binary predictions (0 or 1) representing whether each individual in the test set is likely to earn more than \$50,000 per year.
+
+## Libraries Installed
+
+
+
+```{r}
+library(tidymodels)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(xgboost)
+library(glmnet)
+library(vip)
+```
+
+
+
+## Data
+
+In this section, we load the dataset. Particularly, for this, project, both test and train sets were given to us. After loading the datasets, we realize that test set has one less column i.e. "Income".
+
+
+
+```{r}
+set.seed(427)
+census_train <- read_csv("~/hack-a-thon-singhshubha/census_train.csv")
+census_test <- read_csv("~/hack-a-thon-singhshubha/census_test.csv")
+head(census_train) 
+head(census_test)
+```
+
+
+
+## Data Cleaning
+
+In the Data Cleaning step, we removed an extra column (...1) from our data since it had no use in training the model. The values of more than one category for the target variable, namely \<=50K., were made consistent by transforming them into the standard classes: income ≤\$50K as 0 and \>\$50K as 1. After this, we will see only two observations in income columns. We then transformed all character-type columns into factors, because this is required for using many machine learning algorithms in R. In the end, we checked the structure of both training and test datasets to ensure the data was accurate and standardized.
+
+
+
+```{r}
+census_train <- census_train |> select(-`...1`)
+
+
+# There were four type of variables. Two with '.'. So removing them gave only two observations which made visualizing better
+census_train <- census_train |>
+  mutate(income = if_else(
+    income == "<=50K" | income == "<=50K.", "0", "1"
+  ))
+
+census_train <- census_train |>
+  mutate(across(where(is.character), as.factor))
+
+head(census_train)
+glimpse(census_test)
+```
+
+
+
+## Exploratory Data Analysis
+
+We will now visualize the data from the train set. our response variable is income, hence i am plotting other different variables that i think would be significant in predicting the income of an individual. Some of graphs that i plotted for visualization are:
+
+#### 1. Proportion of Income Levels by Education
+
+
+
+```{r}
+ggplot(census_train, aes(x = education, fill = income)) +
+  geom_bar(position = "fill") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Proportion of Income Levels by Education",
+    x = "Education Level",
+    y = "Proportion",
+    fill = "Income"
+  )
+```
+
+
+
+The data demonstrates that those with the highest degrees, Doctorate, Master’s and Professional, are statistically more likely to earn more than \$50K a year. In addition, people who have not completed high school are generally found in the low-income group. Therefore, the graph predicts that education is closely linked to income.
+
+#### 2. Hours Worked per Week by Income
+
+
+
+```{r}
+ggplot(census_train, aes(x = income, y = `hours-per-week`, fill = income)) +
+  geom_boxplot() +
+  labs(
+    title = "Hours Worked per Week by Income Group",
+    x = "Income",
+    y = "Hours per Week"
+  ) +
+  theme(legend.position = "none")
+
+```
+
+
+
+On average, people earning over \$50K, work more hours than those who earn \$50K or less each year. The number of hours people earning more money do each week is higher and the range is higher as well. Therefore, the plot shows that the people earning over \$50K generally work more hours than those who earn \$50K or less each year.
+
+#### 3. Age Distribution by Income
+
+
+
+```{r}
+ggplot(census_train, aes(x = age, fill = income)) +
+  geom_histogram(position = "identity", bins = 30) +
+  labs(
+    title = "Age Distribution by Income Level",
+    x = "Age",
+    y = "Count"
+  )
+
+```
+
+
+
+We can see from the chart that most people earning higher incomes are between 30 and 60, whereas the majority of those who earn less are usually under 30. The number of individuals who earn higher incomes rises with age until adulthood, probably because they tend to grow more in their career. The plot verifies that the age of a person is significant for predicting their income.
+
+## Models Performed
+
+### Define Models
+
+We develop the models Logistic Regression, Random Forest and XGBoost in the Define Models section to make predictions about people’s earnings. Logistic Regression allows for clear and easy explanation, Random Forest is an excellent choice for complicated data structures and XGBoost is a known precision powerhouse. We will follow them by the Recipe, workflows and finally we fit the model. To enhance the performance of Random Forest and XGBoost, we apply hyperparameter tuning. This process involves searching over a grid.
+
+
+
+```{r}
+log_model <- logistic_reg() |>
+  set_engine("glm") |>
+  set_mode("classification")
+
+rf_model <- rand_forest(
+  mtry = tune(),
+  trees = tune(),
+  min_n = tune()
+) |>
+  set_engine("ranger") |>
+  set_mode("classification")
+
+# XGBoost (tunable)
+xgb_model <- boost_tree(
+  trees = tune(),
+  tree_depth = tune(),
+  learn_rate = tune(),
+  loss_reduction = tune(),
+  sample_size = tune()
+) |>
+  set_engine("xgboost") |>
+  set_mode("classification")
+```
+
+
+
+### Recipe
+
+
+
+```{r}
+#| message: false
+#| warning: false
+census_recipe <- recipe(income ~ ., data = census_train) |>
+  step_unknown(all_nominal_predictors()) |> 
+  step_dummy(all_nominal_predictors()) |> 
+  step_impute_median(all_numeric_predictors()) |>
+  step_impute_mode(all_nominal_predictors()) |>
+  step_zv(all_predictors()) |>  
+  step_normalize(all_numeric_predictors())
+```
+
+
+
+## Tuning Grid
+
+
+
+```{r, cache = TRUE}
+
+rf_grid <- grid_regular(
+  trees(range = c(300, 600)),
+  mtry(range = c(5, 15)),
+  min_n(range = c(2, 10)),
+  levels = 3
+)
+
+# XGBoost tuning grid
+xgb_grid <- grid_latin_hypercube(
+  trees(),
+  tree_depth(),
+  learn_rate(range = c(0.01, 0.3)),
+  loss_reduction(),
+  sample_size = sample_prop(),
+  size = 20
+)
+```
+
+
+
+### Model Workflows
+
+
+
+```{r}
+log_wf <- workflow() |>
+  add_model(log_model) |>
+  add_recipe(census_recipe)
+
+rf_wf <- workflow() |>
+  add_model(rf_model) |>
+  add_recipe(census_recipe)
+
+xgb_wf <- workflow() |>
+  add_model(xgb_model) |>
+  add_recipe(census_recipe)
+```
+
+
+
+## Cross-Validation
+
+We evaluate every model’s performance in the Cross-Validation section using a number of repeated k-fold CV. For this, we divide the data into 3 folds and repeat it times consecutively. We measure the models’ accuracy and test them in the same way using Logistic Regression, Random Forest and XGBoost.
+
+
+
+```{r}
+set.seed(1234)
+census_folds <- vfold_cv(census_train, v = 3, repeats = 3, strata = income)
+
+```
+
+
+
+### Define Metrics
+
+For metrics, we mainly focus on accuracy to assess performance of the models. It determines how accurate each model is at guessing the right class of income people fell into i.e True Postives and True Negatives both. When we use the same basis for testing, all our models are judged on equal terms during cross-validation.
+
+
+
+```{r census_folds, cache=TRUE}
+#| warning: false
+census_metrics <- metric_set(accuracy)
+
+log_results <- log_wf |> 
+  fit_resamples(
+    resamples = census_folds, 
+    metrics = census_metrics
+  )
+
+rf_results <- rf_wf |>
+  tune_grid(
+    resamples = census_folds,
+    grid = rf_grid,
+    metrics = metric_set(accuracy)
+  )
+
+# Tune XGBoost
+xgb_results <- xgb_wf |>
+  tune_grid(
+    resamples = census_folds,
+    grid = xgb_grid,
+    metrics = metric_set(accuracy)
+  )
+```
+
+
+
+### Fit the Models
+
+
+
+```{r}
+#| message: false
+#| warning: false
+log_fit <- fit(log_wf, data = census_train)
+
+# Select best Random Forest
+best_rf <- select_best(x = rf_results, metric = "accuracy")
+
+
+final_rf <- finalize_workflow(rf_wf, best_rf)
+
+rf_fit_final <- fit(final_rf, data = census_train)
+
+# Select best XGBoost
+best_xgb <- select_best(x = xgb_results, metric = "accuracy")
+
+final_xgb <- finalize_workflow(xgb_wf, best_xgb)
+
+xgb_fit_final <- fit(final_xgb, data = census_train)
+```
+
+
+
+## Compare the models based on Accuracy
+
+IN this section, we are collecting the results from before and comparing. we make a nice table and arrange them in descending order. We observe that Random Forest has the best accuracy of about 86.5%.
+
+
+
+```{r}
+set.seed(1234)
+log_metrics <- collect_metrics(log_results) |> mutate(model = "Logistic Regression")
+rf_metrics <- collect_metrics(rf_results) |> mutate(model = "Random Forest")
+xgb_metrics <- collect_metrics(xgb_results) |> mutate(model = "XGBoost")
+
+all_metrics <- bind_rows(log_metrics, rf_metrics, xgb_metrics) |> arrange(desc(mean))
+all_metrics
+
+```
+
+
+
+## Using Random Forest
+
+Showing all the predicted values for the best model based on accuracy.
+
+
+
+```{r}
+# Predicting based on 0/1 levels.
+rf_predictions <- predict(rf_fit_final, new_data = census_test, type = "class")
+
+rf_predictions
+```
+
+
+
+## Converting Predictions to CSV
+
+The final deliverable for the main project. Here the the column name have been sliced so the whole csv file contains only the prediction from the Random Forest Model.
+
+
+
+```{r}
+# Extract predictions as a single column tibble
+submission <- tibble(income = rf_predictions$.pred_class)
+
+# Write to CSV with no column name
+write_csv(submission, "rf_predictions_submission.csv", col_names = FALSE)
+
+```
+
+
+
+## Conclusion
+
+Overall, we built a complete machine learning process to predict if an individual’s income exceeds \$50,000 per year using U.S. Census data. When the data had been cleaned, and modelling done, we tested the performance of Logistic Regression, Random Forest and XGBoost side by side. The overall accuracy of Random Forest was around 86.5%. The test dataset was analyzed using the final model and the output was saved in a CSV file to submit. Altogether, the project showed that ensemble methods are effective in classification and in this project as well.
+

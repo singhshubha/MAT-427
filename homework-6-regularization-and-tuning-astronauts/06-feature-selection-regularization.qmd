@@ -1,0 +1,501 @@
+---
+title: "Homework 6: Feature/Model Selection and Regularization"
+author: "Ashley, Tadeo, Shubha"
+editor: visual
+format:
+  html:
+    embed-resources: true
+---
+
+```{r setup}
+#| include: false
+
+library(tidyverse)
+library(tidymodels)
+library(glmnet)
+library(knitr)
+
+
+tidymodels_prefer()
+```
+
+# Introduction
+
+In this homework you will practice using regularization and model tuning to select models and features.
+
+## Learning goals
+
+In this assignment, you will...
+
+-   Fit linear and logistic regression models using regularization
+-   Use grid-based techniques to choose tuning parameters
+
+# Getting Started
+
+You are free to use whatever version control strategy you like.
+
+## Teams & Rules
+
+You can find your team for this assignment on Canvas in the **People** section. The group set is called **HW6**. Your group will consist of 2-3 people and has been randomly generated. The GitHub assignment can be found [here](https://classroom.github.com/a/aNkAg26g). Rules:
+
+1.  You are all responsible for understanding the work that your team turns in.
+2.  All team members must make roughly equal contributions to the homework.
+3.  Any work completed by a team member must be committed and pushed to GitHub by that person.
+
+# Dataset 1: Communities and Crime
+
+For the first half of this homework, we'll be working with the Communities and Crime data set from the UCI Machine Learning repository. From the abstract:
+
+> "Communities in the US. Data combines socio-economic data from the '90 Census, law enforcement data from the 1990 Law Enforcement Management and Admin Stats survey, and crime data from the 1995 FBI UCR."
+
+More details can be found [here](http://archive.ics.uci.edu/ml/datasets/communities+and+crime+unnormalized). Our goal will be to predict the number of crimes per capita, stored in the column called `ViolentCrimesPerPop`.
+
+## Cleaning and Preprocessing
+
+## Exercise 1
+
+::: {.callout-tip title="Question"}
+Load the data set `CommViolPredUnnormalizedDataCleaned.csv`. This data set contains quite a bit of missing data but it uses question marks to denote values which are missing. Use `read_csv` to load this data set into R and include the argument `na = "?"`. R should automatically replace question marks with missing values. Comment on any aspects of the data which you find pertinent.
+:::
+
+```{r}
+crimesdata <- read_csv("CommViolPredUnnormalizedDataCleaned.csv", na = "?")
+```
+
+Based only on this exercise, some of the things that we noticed were that the data set contains many variables, with 130. Additionally, the variables in the data set, at least in the documentation, are divided into feature and target variables. Quite a lot of variables also seem to be in percentages.
+
+## Exercise 2
+
+::: {.callout-tip title="Question"}
+Clean the data by:
+
+0.  [READ THE DOCUMENTATION!](http://archive.ics.uci.edu/dataset/211/communities+and+crime+unnormalized)
+1.  Dropping any columns that seem like they won't be helpful to your analysis including all of the "non-predictive" and "potential goal" variables (other than `ViolentCrimesPerPop`) in the "Additional Variable Information" section in the documentation.
+2.  Ensuring all features have the correct type.
+:::
+
+```{r}
+crimesdata <- crimesdata |>
+  select(-communityName, -statecode, -countyCode, -communityCode,
+         -fold, -householdsize, -agePct12t21, -agePct16t24, -agePct65up,
+         -numbUrban, -pctWWage, -pctWFarmSelf, -pctWInvInc, -pctWSocSec,
+         -pctWPubAsst, -pctWRetire, -whitePerCap, -blackPerCap, -indianPerCap,
+         -AsianPerCap, -OtherPerCap, -HispPerCap, -NumUnderPov, -PctEmploy, 
+         -PctEmplManu, -PctEmplProfServ, -PctOccupManu, -PctOccupManu, 
+         -PctOccupMgmtProf, -NumKidsBornNeverMar, -PctImmigRec5, -PctImmigRec8,
+         -PctImmigRec10, -PctLargHouseFam, -PersPerOwnOccHous, -PersPerRentOccHous,
+         -PctPersDenseHous, -MedNumBR, -OwnOccLowQuart, -OwnOccMedVal, 
+         -OwnOccHiQuart, -OwnOccQrange, -RentLowQ, -RentMedian, -RentHighQ,
+         -RentQrange, -MedRentPctHousInc, -MedOwnCostPctInc, -MedOwnCostPctIncNoMtg,
+         -LemasSwornFT, -LemasSwFTFieldOps, -LemasTotalReq, -LandArea, 
+         -medFamInc)
+```
+
+All our variables are doubles, which based on the methods we will be using, we do not need to convert them to the numeric type. So, all our features are the correct type. Additionally, all our variables that include percentages are in the same format, 0 - 100.
+
+## Exercise 3
+
+::: {.callout-tip title="Question"}
+Use `drop_na` to drop any rows which have a missing value in the `ViolentCrimesPerPop` column, our target variable. Why do we want to do this instead of trying to impute them?
+:::
+
+```{r}
+crimesdata <- crimesdata |> drop_na(ViolentCrimesPerPop)
+```
+
+Since ViolentCrimesPerPop is our target variable, it does not make sense to impute for missing values, since we would be adding predictions to our observed data.
+
+## Exercise 4
+
+::: {.callout-tip title="Question"}
+How many observation are left? Split the remaining data into a training and test set using an 80-20 split. Use the seed 427.
+:::
+
+```{r}
+set.seed(427)
+crime_split <- initial_split(data = crimesdata, prop = .80, 
+                             strata = ViolentCrimesPerPop)
+crime_training <- training(crime_split)
+crime_testing <- testing(crime_split)
+```
+
+Before our split, our data set had 1994 observations.
+
+## Exercise 5
+
+::: {.callout-tip title="Question"}
+Generate a recipe that can be used for ridge regression and LASSO. At a minimum it should include the following steps (not necessarily in this order):
+
+-   Dummy code all factors.
+-   Imputing missing values.
+-   Normalization of all predictors... why?
+:::
+
+```{r}
+recipe <- recipe(ViolentCrimesPerPop ~ ., data = crime_training) |>
+  step_zv(all_predictors()) |>
+  step_dummy(all_factor_predictors()) |>
+  step_impute_knn(all_numeric_predictors()) |>
+  step_normalize(all_numeric_predictors())
+  
+```
+
+Since we know we are using a ridge and a LASSO model. Since ridge and LASSO both penalize large coefficients, if we do not normalize, they may unjustly penalize coefficients that are large due to their scale. For example, it may unjustly penalize population.
+
+# Initial Model Fits
+
+## Exercise 6
+
+::: {.callout-tip title="Question"}
+Fit two models to the training data, a ridge regression model and a LASSO model. Set the penalty for both to 0. Plot the coefficient estimates against the penalty as in [these](https://mat427sp25.netlify.app/slides/17-regularization#/ridge-coefficients-vs.-penalty-lambda) [plots](https://mat427sp25.netlify.app/slides/17-regularization#/lasso-coefficients-vs.-penalty-lambda). Explain what you see and why. (Practice interview question).
+:::
+
+```{r}
+set.seed(427)
+# Ridge and LASSO with 0 penalty
+ridge <- linear_reg(penalty = 0, mixture = 0) |> 
+  set_engine("glmnet")
+
+lasso <- linear_reg(penalty = 0, mixture = 1) |> 
+  set_engine("glmnet")
+
+
+ridge_workflow <- workflow() |> 
+  add_model(ridge) |> 
+  add_recipe(recipe)
+
+lasso_workflow <- workflow() |> 
+  add_model(lasso) |> 
+  add_recipe(recipe)
+
+# fit models
+ridge_fit <- ridge_workflow |> fit(crime_training)
+lasso_fit <- lasso_workflow |> fit(crime_training)
+
+
+# Plotting against their penalties
+ridge_fit |> extract_fit_engine() |> autoplot()
+lasso_fit |> extract_fit_engine() |> autoplot()
+```
+
+In ridge, as the penalty increases, all coefficients gradually are coming closer to zero. Some of them look like they are not at zero but really close to it. The graph shows gradual change towards zero and there are no abrupt drops. Some variables showed in graph, even though they high higher values, they are slowly coming closer to zero.\
+\
+But unlike Ridge, LASSO is setting the coefficients to exactly at zero. Some coefficients drops exactly to zero which basically means that their value is none and is not used in the model.
+
+# Tuning your model
+
+## Exercise 7
+
+::: {.callout-tip title="Question"}
+Use cross-validation and grid-search to find the best penalty (according to RMSE) for your Ridge and LASSO models. Tip: This step will take a while to run so start with two folds and one repetition, maybe even on a subset of your data, until you're sure that it is running correctly. Then use 5-folds and 10-repeats to get your final estimate of $\lambda$. In addition, make use of [caching](https://quarto.org/docs/computations/caching.html) so you don't need to re-run the cross-validation every time the document is Rendered.
+:::
+
+```{r}
+
+ridge_tune <- linear_reg(penalty = tune(), mixture = 0) |> 
+  set_engine("glmnet")
+
+lasso_tune <- linear_reg(penalty = tune(), mixture = 1) |> 
+  set_engine("glmnet")
+
+# Define resampling method
+cv_folds <- vfold_cv(crime_training, v = 5, repeats = 10)
+
+
+# Define a grid of penalty values
+penalty_grid <- grid_regular(penalty(), levels = 50)
+
+
+ridge_workflow_tune <- workflow() |> 
+  add_model(ridge_tune) |> 
+  add_recipe(recipe)
+
+lasso_workflow_tune <- workflow() |> 
+  add_model(lasso_tune) |> 
+  add_recipe(recipe)
+
+
+# Tune Ridge Model
+tuning_ridge_results <- tune_grid(
+  ridge_workflow_tune,
+  resamples = cv_folds,
+  grid = penalty_grid,
+  metrics = metric_set(rmse)
+)
+
+# Tune LASSO Model
+tuning_lasso_results <- tune_grid(
+  lasso_workflow_tune,
+  resamples = cv_folds,
+  grid = penalty_grid,
+  metrics = metric_set(rmse)
+)
+```
+
+```{r}
+
+#list 
+show_best(tuning_ridge_results, metric = "rmse")
+show_best(tuning_lasso_results, metric = "rmse")
+
+
+ridge_penalty <- select_best(tuning_ridge_results, metric = "rmse")$penalty
+lasso_penalty <- select_best(tuning_lasso_results, metric = "rmse")$penalty
+lasso_penalty
+```
+
+# Final Model
+
+## Exercise 8
+
+::: {.callout-tip title="Question"}
+Fit your best Ridge, and your best LASSO model to the full training set. Assess both models performance on the test set. Which is better? List all variables that LASSO includes in the final model. How does this compare to Ridge? What does this mean for the interpretability of a model fit with LASSO compared to Ridge?
+:::
+
+```{r}
+
+# final models with best penalties
+ridge_final <- linear_reg(penalty = ridge_penalty, mixture = 0) |> 
+  set_engine("glmnet")
+
+lasso_final <- linear_reg(penalty = lasso_penalty, mixture = 1) |> 
+  set_engine("glmnet")
+
+# final workflows
+ridge_workflow_final <- workflow() |> 
+  add_recipe(recipe) |> 
+  add_model(ridge_final)
+
+lasso_workflow_final <- workflow() |> 
+  add_recipe(recipe) |> 
+  add_model(lasso_final)
+
+# final models on the full training data
+final_ridge_fit <- fit(ridge_workflow_final, data = crime_training)
+final_lasso_fit <- fit(lasso_workflow_final, data = crime_training)
+
+# model performance on the test set
+ridge_result <- predict(final_ridge_fit, crime_testing) |> 
+  bind_cols(crime_testing) |> 
+  metrics(truth = ViolentCrimesPerPop, estimate = .pred)
+
+lasso_result <- predict(final_lasso_fit, crime_testing) |> 
+  bind_cols(crime_testing) |> 
+  metrics(truth = ViolentCrimesPerPop, estimate = .pred)
+
+print(ridge_result)
+print(lasso_result)
+```
+
+Since, Ridge has lower RMSE, it is better.\
+
+```{r}
+#onlt extracting non zero variables. 
+lasso_coefs <- tidy(extract_fit_parsnip(final_lasso_fit)) |> 
+  filter(estimate != 0) |> 
+  select(term, estimate)
+
+
+lasso_coefs
+
+
+```
+
+Comparing both Ridge and LASSO we see they both have a lot of variables. It is unusual for LASSO because usually it shrinks a lot of variables. But in this case, since the penalty is so low, it decided to still show all the variables.\
+\
+And since in this case, LASSO did not do much, we can say that for interpretability, LASSO did not do much than Ridge. Hence, the advantage of LASSO over Ridge does not exists.
+
+# Dataset 2: NFL Field Goals
+
+In the second part of this homework, you will practice working with a classification problem. The dataset describes NFL field goal attempts. For those of you unfamiliar with American football, this is when the kicker tries to kick the ball through the uprights to score three points, as in [this video](https://www.youtube.com/watch?v=U3L10PoEXvI). This data set contains information on about 3000 NFL field goal attempts over three seasons. The column we will be interested in predicting is `Made`, which has value `1` or `0` indicating if the field goal was made or missed. If you want explanations for the other variables, you can look at the notes in the Excel file (the `.xlsx` file) by hovering over the variable names.
+
+## Exercise 9
+
+::: {.callout-tip title="Question"}
+Open the data in Excel. Clean up the spreadsheet and save it as a csv so that it can be loaded into R. Load the data, partition the data using a 80-20 split.
+:::
+
+```{r}
+# Load the dataset
+nfl_data <- read_csv("~/homework-6-regularization-and-tuning-astronauts/nfl-fg-data.csv")
+```
+
+## Exercise 10
+
+::: {.callout-tip title="Question"}
+Clean the data by:
+
+1.  Dropping any columns that seem like they won't be helpful to your analysis. There is at least one.
+2.  Ensuring all features have the correct type.
+3.  Convert the `Made` column into a factor with informative levels (e.g. `Made`, `Missed`).
+:::
+
+```{r}
+# Remove any NA values
+nfl <- na.omit(nfl_data)
+
+# Drop unnecessary columns
+nfl <- nfl |> select(-`Def PA`, -Backup, -Denver, -`Precip Bin`)
+
+#factoring Made and everything else to a number with most 2 decimals
+nfl <- nfl |>
+  mutate(
+    Made = factor(Made, levels = c(0,1), labels = c("Missed", "Made")), 
+    across(-Made, ~ round(as.numeric(.), 2))
+  )
+
+
+nfl_split <- initial_split(data = nfl, prop = .80, strata = Made)
+nfl_training <- training(nfl_split)
+nfl_testing <- testing(nfl_split)
+```
+
+## Exercise 11
+
+::: {.callout-tip title="Question"}
+What proportion of field goals in your training set were made? What does this mean in the context of determining a baseline level of accuracy that we want to beat?
+:::
+
+```{r}
+made_proportion <- mean(nfl_training$Made == "Made")
+print(made_proportion)
+```
+
+So, 82.5% of the attempts made are field goals. And if we were to guess or predict 'Made', the baseline level of accuracy will be 82.5%. Therefore, any model we make should be above this.
+
+# Logistic Regression and Regularization
+
+We will now extend what we've learned about $L_1$-regularization to logistic regression! In the same way that LASSO adds an $L_1$-norm penalty to the *objective* function for Ordinary Least Squares regression, we can add an $L_1$-norm penalty to the objective function for logistic regression. Whereas in OLS, the objective function was the sum of squared errors, the objective function for Logistic Regression is the log-likelihood. Other than this the principle works the same way... by including an $L_1$-regularization term, you induce sparsity.
+
+## Exercise 12
+
+::: {.callout-tip title="Question"}
+Generate a recipe that can be used for logistic regression with $L_1$-regularization. At a minimum it should include the following steps (not necessarily in this order):
+
+-   Dummy code all factors.
+-   Normalization of all predictors... why?
+:::
+
+```{r}
+log_recipe <- recipe(Made ~ . , data = nfl_training) |> 
+  step_dummy(all_nominal_predictors()) |> 
+  step_normalize(all_numeric_predictors())
+```
+
+-   All predictors are normalized to ensure [they all have a proportional impact on the model](https://www.datacamp.com/tutorial/normalization-in-machine-learning#:~:text=By%20normalizing%20the%20features%2C%20we%20can%20ensure%20that%20each%20feature%20contributes%20proportionally%20to%20the%20model's%20learning%20process.%20The%20model%20can%20now%20learn%20patterns%20across%20all%20features%20more%20effectively%2C%20leading%20to%20a%20more%20accurate%20representation%20of%20the%20underlying%20relationships%20in%20the%20data.)/larger numbers inherently don't skew the model.
+
+## Exercise 13
+
+::: {.callout-tip title="Question"}
+Fit a logistic regression model with $L_1$ regularization to the training data. This can be done in the exact same was as with OLS, simply use `logisic_reg` instead of `linear_reg` when you start your model and make sure to use `glmnet` as your engine. Set the penalty to 0. Plot the coefficient estimates against the penalty as in [these](https://mat427sp25.netlify.app/slides/17-regularization#/ridge-coefficients-vs.-penalty-lambda) [plots](https://mat427sp25.netlify.app/slides/17-regularization#/lasso-coefficients-vs.-penalty-lambda). Explain what you see and why. (Practice interview question).
+:::
+
+```{r}
+lasso_log <- logistic_reg(mixture = 1, penalty = 0) |> 
+  set_engine("glmnet")
+
+lasso_log_wf <- workflow() |> 
+  add_recipe(log_recipe) |>
+  add_model(lasso_log)
+
+lasso_log_fit <- lasso_log_wf |> 
+  fit(nfl_training)
+```
+
+```{r}
+lasso_log_fit |> extract_fit_engine() |> autoplot()
+```
+
+In this graph we see all the variables are taken to value 0. some more abrupt than others. Unlike Ridge, Lasso forces variables to zero. Coefficients drops exactly to zero which basically means that their value is none and is not used in the model.
+
+## Exercise 14
+
+::: {.callout-tip title="Question"}
+Use cross-validation and grid-search to find the best penalty (according to accuracy) for your logistic regression model. Tip: This step will take a while to run so start with two folds and one repetition, maybe even on a subset of your data, until you're sure that it is running correctly. Then use 5-folds and 10-repeats to get your final performance estimates. In addition, make use of [caching](https://quarto.org/docs/computations/caching.html) so you don't need to re-run the cross-validation every time the document is Rendered.
+:::
+
+```{r}
+lasso_log_tune <- logistic_reg(mixture = 1, penalty = tune()) |>
+  set_engine("glmnet")
+
+lasso_log_tune_wf <- workflow() |> 
+  add_recipe(log_recipe) |>
+  add_model(lasso_log_tune)
+
+nfl_metrics <- metric_set(accuracy, recall, precision, roc_auc)
+```
+
+```{r}
+#| cache: true
+
+nfl_folds <- vfold_cv(nfl_training, v = 5, repeats = 10)
+
+nfl_penalty_grid <- grid_regular(penalty(range = c(-10, 2)), levels = 10)
+
+tuning_lasso_log_results <- tune_grid(
+  lasso_log_tune_wf,
+  resamples = nfl_folds,
+  grid = nfl_penalty_grid
+)
+
+autoplot(tuning_lasso_log_results)
+```
+
+```{r}
+best_auc_lasso_log <- tuning_lasso_log_results |> 
+  select_best(metric = "accuracy")
+
+best_auc_lasso_log |> kable()
+```
+
+## Exercise 15
+
+::: {.callout-tip title="Question"}
+Fit your final model on the full training set and assess it's performance on the test set. Which variables are included in your final model?
+:::
+
+```{r}
+tidy(lasso_log_fit) |> kable()
+```
+
+```{r}
+nfl_test_wpreds <- nfl_testing |> 
+  mutate(lasso_preds = predict(lasso_log_fit, new_data = nfl_testing, type = "class") |> pull(.pred_class))
+
+
+nfl_acc <- accuracy(nfl_test_wpreds, truth = Made, estimate = lasso_preds)$.estimate
+
+nfl_acc |> kable()
+```
+
+-   All variables are included in the final model, because the best penalty is 0 meaning no regularization.
+
+-   Accuracy: 84%
+
+## Exercise 16 (Very long question)
+
+::: {.callout-tip title="Question"}
+Use grid search and cross-validation to find the best $k$ for a KNN classification model on this data. Fit the final model on the full training set and assess it's performance on the test set. How does it perform compared to the model from Exercise 15?
+:::
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+-   
+
+## Exercise 17 (Practice Interview Question)
+
+::: {.callout-tip title="Question"}
+Why doesn't it make sense to use $L_1$ regularization with KNN?
+:::
+
+-   KNN deals with distances, not coefficients, so there’s nothing to shrink.

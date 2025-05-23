@@ -1,0 +1,518 @@
+---
+title: "Homework 05: Preprocessing and Cross Validation" 
+author: "Aayush, Shubha, Tadeo"
+editor: visual
+format:
+  html:
+    embed-resources: true
+---
+
+# Introduction
+
+In this homework you will practice pre-processing data and using cross-validation to evaluate regression models.
+
+## Learning goals
+
+In this assignment, you will...
+
+-   Use exploratory data analysis to inform feature engineering steps
+-   Pre-process data and impute missing values
+-   Evaluate and compare models using cross-validation
+
+# Getting Started
+
+In last weeks homework, you learned how to share your work using GitHub and to resolve merge conflicts using branches. From here on out, you are free to use whatever version control strategy you like.
+
+## Teams & Rules
+
+You can find your team for this assignment on Canvas in the **People** section. The group set is called **HW5**. Your group will consist of 2-3 people and has been randomly generated. You have now been exposed to all of the Git concepts that we will talk about in this class. It is up to you to apply them to complete your homework in any way you see fit. Some rules:
+
+1.  You are all responsible for understanding the work that you turn in.
+2.  All team members must make roughly equal contributions to the homework.
+3.  Any work completed by a team member must be committed and pushed to GitHub by that person.
+
+## Exercise 0
+
+As in your previous homework's, create your team on GitHub classroom and clone the repository. [Here](https://classroom.github.com/a/VhxbjrFN) is a link to the homework.
+
+## Data: LEGO
+
+The data for this analysis includes information about LEGO sets from themes produced January 1, 2018 and September 11, 2020. The data were originally scraped from Brickset.com, an online LEGO set guide and were obtained for this assignment from Peterson and Zieglar ([2021](https://www.tandfonline.com/doi/full/10.1080/26939169.2021.1946450)).
+
+You will work with data on about 400 randomly selected LEGO sets produced during this time period. The primary variables are interest in this analysis are:
+
+-   `Item_Number`: a serial code corresponding to the set.
+-   `Set_Name`: The name of the LEGO set.
+-   `Theme`: Theme of the LEGO set.
+-   `Pieces`: Number of pieces in the set from brickset.com.
+-   `Amazon_Price`: Amazon price of the set scraped from brickset.com (in U.S. dollars).
+-   `Year` : Year the LEGO set was produced.
+-   `Ages`: Variable stating what aged children the set is appropriate for.
+-   `Pages`: Number of pages in the instruction booklet.
+-   `Minifigures`: Number of minifigures (LEGO people) in the set scraped from brickset.com. LEGO sets with no minifigures have been coded as NA. NA's also represent missing data. This is due to how brickset.com reports their data.
+-   `Packaging`: What type of packaging the set came in.
+-   `Weight`: The weight of the set.
+-   `Unique_Pieces`: The number of unique pieces in each set.
+-   `Availability`: Where the set can be purchased.
+-   `Size`: General size of the interlocking bricks (Large = LEGO Duplo sets - which include large brick pieces safe for children ages 1 to 5, Small = LEGO sets which- include the traditional smaller brick pieces created for age groups 5 and - older, e.g., City, Friends).
+
+Your ultimate goal will be to predict `Amazon_Price` from the other features.
+
+# Loading & Cleaning the Data
+
+## Libraries
+
+All the libraries required for the completion of the homework:
+
+```{r}
+library(readr)
+library(dplyr)
+library(knitr)
+library(tidyverse)
+library(tidymodels)
+library(caret)
+library(ISLR2)
+library(readODS)
+library(ggrepel)
+
+tidymodels_prefer()
+```
+
+## Exercise 1
+
+::: {.callout-tip title="Question"}
+The data are contained in `lego-sample.csv`. Load the data.
+:::
+
+```{r}
+lego <- read_csv("lego-sample.csv")
+head(lego)
+```
+
+## Exercise 2
+
+::: {.callout-tip title="Question"}
+Two of the variables in the data set shouldn't be useful because they just serve to identify the different LEGO sets. Which two are they? Remove them.
+:::
+
+The two variables that are not needed are the Item_number and Theme. Item_number is a unique integer used to denote the Lego set and Theme is used to identify the theme of the Lego set which in this case we do not need. Name of the Lego set should be good the identify what Lego set we are working on.
+
+```{r}
+
+lego <- lego |> select(-Item_Number, -Set_Name)
+head(lego)
+```
+
+## Exercise 3
+
+::: {.callout-tip title="Question"}
+Notice that the `Weight` variable is a bit odd... It seems like it should be numeric but it's a `chr`. Why? Write code to extract the true numerical weight in either lbs or Kgs (your choice). You are encouraged to use the internet and generative AI to help you figure out how to do this. However, make sure you are able to explain your code once you are done.
+:::
+
+```{r}
+
+library(stringr)
+
+# Extract numerical weight values in kg and rename column
+lego <- lego |> mutate(
+  Weight = case_when(
+    str_detect(Weight, "Kg") ~ as.numeric(str_extract(Weight, "[0-9]+\\.?[0-9]*")),  # Extract Kg value
+    TRUE ~ NA_real_  # Keep NA values
+  )
+) |> rename(`Weight (kg)` = Weight)  # Rename column
+
+# View the cleaned dataset
+print(lego)
+
+```
+
+-   While looking at the dataset, we can see that while some of the weight is missing, some have weight in both kgs and lbs, with the units included, which is why it is saved as chr. I chose to keep the kg value and NA for missing values.
+
+-   **`mutate()`**: Used to modify the `Weight` column.
+
+-   **`case_when()`**: Checks different conditions and assigns appropriate values.
+
+    -   **If the weight contains "Kg"** → Extracts the number before "Kg" using `str_extract()`.
+
+    -   **If neither "Kg" nor "lb" is found** → Assigns `NA_real_` (keeps missing values as NA).
+
+-   `"[0-9]+\\.?[0-9]*"` → Extracts the first numeric value (for kg).
+
+-   **Renames the column** from `Weight` to `Weight (kg)` for clarity.
+
+## Exercise 4
+
+::: {.callout-tip title="Question"}
+For each of the 12 features do the following:
+:::
+
+### Exercise 4.1
+
+::: {.callout-tip title="Question"}
+Identify if they are the correct data type. Are categorical variables coded as factors? Are the factor levels in the correct order if necessary? Are numerical variables coded as numbers? You will need to read descriptions of the data to make this determination.
+:::
+
+```{r}
+glimpse(lego)
+lego <- lego |>
+  mutate(Ages = factor(Ages, levels = c("Ages_2+",
+                                        "Ages_6+",
+                                        "Ages_8+",
+                                        "Ages_9+",
+                                        "Ages_10+",
+                                        "Ages_6-12")))
+lego <- lego |>
+  mutate(Packaging = factor(Packaging),
+         Availability = factor(Availability),
+         Size = factor(Size, levels = c("Small",
+                                        "Big")),
+         Theme = factor(Theme))
+```
+
+### Exercise 4.2
+
+::: {.callout-tip title="Question"}
+Identify any variables with missing values. Identify and then fix any variables for whom missing values (i.e. `NA`s) indicate something other than that the data is missing (there is at least one). Fill in this missing values appropriately.
+:::
+
+```{r}
+lego |> 
+  summarize(across(everything(), ~ sum(is.na(.)))) |> 
+  pivot_longer(everything()) |> 
+  filter(value > 0) |> 
+  kable()
+
+lego <- lego |>
+  mutate(Minifigures = ifelse(is.na(Minifigures) & Theme %in% c("Architecture",
+                                                               "DUPLO",
+                                                               "LEGO Art",
+                                                               "LEGO Super Mario",
+                                                               "Technic"),
+                                    0, Minifigures))
+```
+
+-   We see that theme, ages, pages, minifigures, packages, weight, availability, and size all contain missing values. We know, from the data decription, that the NA in minifigures could represent a 0 or a missing data. To better get an idea of which data is missing and which data is actually a 0, we can consider if the lego theme historically has had minifigures in the past. We know that, generally, technic, super mario, art, duplo, and architecture sets generally do not contain minifigures.
+
+### Exercise 4.3
+
+::: {.callout-tip title="Question"}
+For all of the categorical variables, identify ones that you think may be problematic because they may have near-zero variance. Decide whether to remove them now, or remove them as part of your pre-processor. Make an argument for why your choice is appropriate.
+:::
+
+```{r}
+nearZeroVar(lego, saveMetrics = TRUE) |> kable()
+lego <- lego |>
+  select(-Size)
+```
+
+-   From the visualization above, we see that packaging, availability, and size all have near zero variance. From this, I only decided to remove size, as this column had zero variance. Additionally, although other columns had near zero variance, they could provide additional information to our model. For example in retail, lego exclusives could be more expensive than retail.
+
+### Exercise 4.4
+
+::: {.callout-tip title="Question"}
+For all of the categorical variables, identify ones that you think may be problematic because they have many categories that don't have a lot of observations and likely need to be "lumped". Decide whether to remove them now, or remove them as part of your pre-processor. Make an argument for why your choice is appropriate.
+:::
+
+```{r}
+lego |> count(Theme) |> kable()
+```
+
+-   We see that theme has many categories, and that some of those categories have few observations. Instead of removing this column, we could instead lump rare categories together under "other". We could do this in the preprocessing, as this lumping would be performed for modeling purposes.
+
+# Data Splitting & Preprocessing
+
+## Exercise 5
+
+::: {.callout-tip title="Question"}
+Split your data into training and test sets. Use your own judgement to determine training to test split ratio. Make sure to set a seed.
+:::
+
+```{r}
+set.seed(427)
+lego_split <- initial_split(lego, prop = .75, strata = Amazon_Price)
+lego_train <- training(lego_split)
+lego_test <- testing(lego_split)
+```
+
+## Exercise 6
+
+::: {.callout-tip title="Question"}
+Generate at least three different recipes designed to be used with linear regression that treat preprocessing differently. Hint: you'll likely want to try out different missing value imputation or lumping strategies. It's also a good idea to include `step_lincolm`.
+:::
+
+```{r}
+lm_knnimpute <- recipe(Amazon_Price ~ ., data = lego_train) |> 
+  step_nzv(all_predictors()) |>  # remove zero or near-zero variable predictors
+  step_impute_knn(all_numeric_predictors()) |>  # impute missing values using KNN
+  step_unknown(all_nominal_predictors()) |>  # handle missing categorical values
+  step_other(all_nominal_predictors(), threshold = 0.01, other = "Other") |> # lump rare categories
+  step_dummy(all_nominal_predictors(), one_hot = FALSE) |>  # in general use one_hot unless doing linear regression
+  step_corr(all_numeric_predictors(), threshold = 0.75) |> # adjusted correlation threshold
+  step_lincomb(all_numeric_predictors()) # remove variables that have exact linear combinations
+  
+lm_meanimpute <- recipe(Amazon_Price ~ ., data = lego_train) |> 
+  step_nzv(all_predictors()) |>  # remove zero or near-zero variable predictors
+  step_impute_mean(all_numeric_predictors()) |>  # impute missing values using mean
+  step_unknown(all_nominal_predictors()) |>  # handle missing categorical values
+  step_other(all_nominal_predictors(), threshold = 0.01, other = "Other") |> # lump rare categories
+  step_dummy(all_nominal_predictors(), one_hot = FALSE) |>  # in general use one_hot unless doing linear regression
+  step_corr(all_numeric_predictors(), threshold = 0.75) |> # adjusted correlation threshold
+  step_lincomb(all_numeric_predictors()) # remove variables that have exact linear combinations
+  
+lm_medianimpute <- recipe(Amazon_Price ~ ., data = lego_train) |> 
+  step_nzv(all_predictors()) |>  # remove zero or near-zero variable predictors
+  step_impute_median(all_numeric_predictors()) |>  # impute missing values using median
+  step_unknown(all_nominal_predictors()) |>  # handle missing categorical values
+  step_other(all_nominal_predictors(), threshold = 0.01, other = "Other") |> # lump rare categories
+  step_dummy(all_nominal_predictors(), one_hot = FALSE) |>  # in general use one_hot unless doing linear regression
+  step_corr(all_numeric_predictors(), threshold = 0.75) |> # adjusted correlation threshold
+  step_lincomb(all_numeric_predictors()) # remove variables that have exact linear combinations
+```
+
+## Exercise 7
+
+::: {.callout-tip title="Question"}
+Generate at least three different recipes designed to be used with $K$-nearest neighbors that treat preprocessing differently. Hint: you'll likely want to try out different missing value imputation or lumping strategies.
+:::
+
+```{r}
+knn_preproc1 <- recipe(Amazon_Price ~ ., data = lego_train) |> 
+  step_nzv(all_predictors()) |>  # remove zero or near-zero variable predictors
+  step_impute_knn(all_numeric_predictors()) |>  # impute missing values using KNN
+  step_unknown(all_nominal_predictors()) |>  # handle missing categorical values
+  step_other(all_nominal_predictors(), threshold = 0.01, other = "Other") |> # lump rare categories
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) |>  # one-hot encode categorical variables
+  step_corr(all_numeric_predictors(), threshold = 0.75) |> # adjusted correlation threshold
+  step_lincomb(all_numeric_predictors()) |> # remove linear combinations
+  step_normalize(all_numeric_predictors()) # normalize numeric predictors
+  
+knn_preproc2 <- recipe(Amazon_Price ~ ., data = lego_train) |> 
+  step_nzv(all_predictors()) |>  # remove zero or near-zero variable predictors
+  step_impute_mean(all_numeric_predictors()) |>  # impute missing values using mean
+  step_unknown(all_nominal_predictors()) |>  # handle missing categorical values
+  step_other(all_nominal_predictors(), threshold = 0.01, other = "Other") |> # lump rare categories
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) |>  # one-hot encode categorical variables
+  step_corr(all_numeric_predictors(), threshold = 0.75) |> # adjusted correlation threshold
+  step_lincomb(all_numeric_predictors()) |> # remove linear combinations
+  step_normalize(all_numeric_predictors()) # normalize numeric predictors
+  
+knn_preproc3 <- recipe(Amazon_Price ~ ., data = lego_train) |> 
+  step_nzv(all_predictors()) |>  # remove zero or near-zero variable predictors
+  step_impute_median(all_numeric_predictors()) |>  # impute missing values using median
+  step_unknown(all_nominal_predictors()) |>  # handle missing categorical values
+  step_other(all_nominal_predictors(), threshold = 0.01, other = "Other") |> # lump rare categories
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) |>  # one-hot encode categorical variables
+  step_corr(all_numeric_predictors(), threshold = 0.75) |> # adjusted correlation threshold
+  step_lincomb(all_numeric_predictors()) |> # remove linear combinations
+  step_normalize(all_numeric_predictors()) # normalize numeric predictors
+```
+
+# Model-Fitting & Evaluation
+
+## Exercise 7
+
+::: {.callout-tip title="Question"}
+Create a `workflow_set` that contains 12 different workflows:
+
+-   three linear regression workflows: one linear regression model with each of the three recipes you created above
+-   nine different KNN workflows: choose three different $K$s for you KNN models and create one workflow for each combination of KNN model and preprocessing recipe
+:::
+
+```{r}
+# Linear regression model
+lm_model <- linear_reg() |> set_engine("lm")
+
+# KNN models with different K values
+knn5_model <- nearest_neighbor(mode = "regression", neighbors = 5) |> set_engine("kknn")
+knn10_model <- nearest_neighbor(mode = "regression", neighbors = 10) |> set_engine("kknn")
+knn15_model <- nearest_neighbor(mode = "regression", neighbors = 15) |> set_engine("kknn")
+
+# Define preprocessing strategies for KNN
+knn_preprocessors <- list(
+  knn_knn_impute = knn_preproc1,
+  knn_mean_impute = knn_preproc2,
+  knn_median_impute = knn_preproc3
+)
+
+# Define preprocessing strategies for Linear Regression
+lm_preprocessors <- list(
+  lm_knn_impute = lm_knnimpute,
+  lm_mean_impute = lm_meanimpute,
+  lm_median_impute = lm_medianimpute
+)
+
+# Associate models with preprocessing strategies
+knn_models <- list(
+  knn5 = knn5_model,
+  knn10 = knn10_model,
+  knn15 = knn15_model
+)
+
+lm_models <- list(
+  lm_model = lm_model
+)
+
+# Create workflow sets
+knn_workflows <- workflow_set(knn_preprocessors, knn_models, cross = TRUE)
+lm_workflows <- workflow_set(lm_preprocessors, lm_models, cross = TRUE)
+
+# Combine workflows
+all_models <- bind_rows(lm_workflows, knn_workflows)
+
+print(all_models)  # Check workflows
+
+```
+
+## Exercise 8
+
+::: {.callout-tip title="Question"}
+Use 5 fold CV with 5 repeats to compute the RMSE and R-squared for each of the 12 workflows you created above. Note that this step may take a few minutes to execute.
+:::
+
+```{r}
+# Define metrics
+lego_metrics <- metric_set(rmse, rsq)
+
+# Define 5-fold CV with 5 repeats
+lego_folds <- vfold_cv(lego_train, v = 5, repeats = 5)
+
+# Fit resamples for all models
+all_fits <- all_models |> 
+  workflow_map("fit_resamples",
+               resamples = lego_folds,
+               metrics = lego_metrics)
+
+# Collect and display RMSE results
+collect_metrics(all_fits) |> 
+  filter(.metric == "rmse") |> 
+  kable()
+
+# Collect and display R-squared results
+collect_metrics(all_fits) |> 
+  filter(.metric == "rsq") |> 
+  kable()
+
+```
+
+## Exercise 9
+
+::: {.callout-tip title="Question"}
+Plot the results of your cross validation and select your best workflow.
+:::
+
+```{r}
+autoplot(all_fits, metric = "rmse") +
+  geom_text_repel(aes(label = wflow_id), nudge_x = 1/8, nudge_y = 1/100, angle = 90) +
+  theme(legend.position = "none")
+
+```
+
+```{r}
+autoplot(all_fits, metric = "rsq") +
+  geom_text_repel(aes(label = wflow_id), nudge_x = 1/8, nudge_y = 1/100, angle = 90) +
+  theme(legend.position = "none")
+
+```
+
+As we know, higher $R^2$ values and lower RMSE values are better.
+
+As we can clearly see in the graph, lm models are clearly better than the KNN models. In the first graph lm models have the lowest RMSE values and in the second graph we have the highest $R^2$ values. Therefore linear model are better performers than LNN model in this scenario.
+
+\
+To be specific we observed that **lm_knn_impute_lm_model** to show the best performance out of all.
+
+## Exercise 10
+
+::: {.callout-tip title="Question"}
+Re-fit your best model on the whole training set and estimate your error metrics on the test set.
+:::
+
+```{r}
+best_workflow <- all_models |>
+  extract_workflow("lm_knn_impute_lm_model")
+
+final_fit <- best_workflow |>
+  fit(data = lego_train)
+
+final_predict <- final_fit |>
+  predict(new_data = lego_test) |>
+  bind_cols(lego_test)
+
+test_metrics <- final_predict |>
+  metrics(truth = Amazon_Price, estimate = .pred)
+
+test_metrics |> kable()
+```
+
+# Conceptual Question
+
+## Exercise 11 (Sample interview question)
+
+::: {.callout-tip title="Question"}
+The time to complete cross-validation can be substantially improved by using parallel processing. Below is the output for the copilot prompt "Generate pseudo-code in R to do cross-validation with repetition and multiple models". Which parts of this code can be run in parallel and which can't. Note any changes that you might need to make for this to be parallelizable.
+
+```{r}
+#| eval: FALSE
+
+# Define the number of folds (k) and the number of repetitions (r)
+k <- 5
+r <- 3
+
+# Define the list of models to evaluate
+models <- list(
+    model1 = train_model1,
+    model2 = train_model2,
+    model3 = train_model3
+)
+
+# Initialize a list to store the performance metrics for each model
+all_performance_metrics <- list()
+
+# Loop through each model
+for (model_name in names(models)) {
+    # Initialize a list to store the performance metrics for this model
+    model_performance_metrics <- list()
+    
+    # Loop through each repetition
+    for (rep in 1:r) {
+        # Create k-fold cross-validation indices for this repetition
+        folds <- createFolds(dataset$target_variable, k = k)
+        
+        # Initialize a list to store the performance metrics for this repetition
+        performance_metrics <- list()
+        
+        # Loop through each fold
+        for (i in 1:k) {
+            # Use the i-th fold as the validation set
+            validation_indices <- folds[[i]]
+            validation_set <- dataset[validation_indices, ]
+            
+            # Use the remaining folds as the training set
+            training_set <- dataset[-validation_indices, ]
+            
+            # Train the model on the training set
+            model <- models[[model_name]](training_set)
+            
+            # Evaluate the model on the validation set
+            performance <- evaluate_model(model, validation_set)
+            
+            # Store the performance metric
+            performance_metrics[[i]] <- performance
+        }
+        
+        # Store the performance metrics for this repetition
+        model_performance_metrics[[rep]] <- performance_metrics
+    }
+    
+    # Store the performance metrics for this model
+    all_performance_metrics[[model_name]] <- model_performance_metrics
+}
+
+# Calculate the average performance metric for each model across all repetitions
+average_performance <- sapply(all_performance_metrics, function(metrics) mean(unlist(metrics)))
+
+# Output the average performance for each model
+print("Average Performance for each model:")
+print(average_performance)
+```
+:::

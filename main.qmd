@@ -177,10 +177,7 @@ performance_categories <- meat_data |>
     Seafood_Performance_Category = seafood_performance_category
   )
 
-cat("\nMeat Performance Distribution:\n")
 print(table(meat_performance_category))
-
-cat("\nSeafood Performance Distribution:\n")
 print(table(seafood_performance_category))
 
 ```
@@ -331,6 +328,8 @@ p6 <- ggplot(seafood_data, aes(x = performance_category, y = `Weekly Labor Hours
 
 ## Performance Scatter Analysis
 
+### Meat Department
+
 ```{r scatter-analysis}
 #| fig-height: 8
 create_performance_scatter <- function(df, sales_col, shrink_col, dept) {
@@ -373,6 +372,12 @@ create_performance_scatter <- function(df, sales_col, shrink_col, dept) {
 }
 
 create_performance_scatter(meat_data, "Meat Sales", "Meat Dept Shrink Pct", "Meat")
+```
+
+### Seafood Department
+
+```{r}
+create_performance_scatter(seafood_data, "Seafood Sales", "Seafood Dept Shrink Pct", "Seafood")
 ```
 
 # Classification Model
@@ -744,25 +749,6 @@ shrink_importance |>
     col.names = c("Feature", "Importance Score", "% of Total", "Interpretation"),
     caption = "Detailed breakdown of factors influencing meat department shrink"
   )
-```
-
-## Combined Feature Importance Visualization
-
-```{r combined-vip-plots}
-#| fig-height: 12
-
-# Combine both VIP plots for comparison
-combined_vip <- (class_vip / shrink_vip) +
-  plot_annotation(
-    title = "Feature Importance Analysis: Performance Classification vs Shrink Prediction",
-    subtitle = "Comparing key drivers of store performance tiers and shrink rates",
-    theme = theme(
-      plot.title = element_text(face = "bold", size = 16),
-      plot.subtitle = element_text(size = 14)
-    )
-  )
-
-combined_vip
 ```
 
 ## Shrink Analysis by Performance Category
@@ -1276,6 +1262,7 @@ aggregate_impact <- enhanced_recommendations |>
   arrange(desc(Priority_Score), desc(Total_Annual_Loss))
 
 cat("\n=== AGGREGATE SALES IMPACT BY PRIORITY AND RISK ===\n")
+cat("\n=== Only taking stores with more than 0ft of Butcher Blocks ===\n")
 aggregate_impact |>
   mutate(
     Total_Annual_Loss = dollar(Total_Annual_Loss),
@@ -1287,7 +1274,7 @@ aggregate_impact |>
 sales_impact_viz <- enhanced_recommendations |>
   filter(Meat_Length_Change < 0 | Seafood_Length_Change < 0) |>
   select(`Store ID`, Weekly_Loss, Priority_Score) |>
-  slice_head(n = 10) |>  # Limit to top 30 stores for readability
+  slice_head(n = 10) |>  
   pivot_longer(cols = c(Weekly_Loss),
                names_to = "Scenario", values_to = "Weekly_Loss") |>
   mutate(Scenario = str_remove(Scenario, "Weekly_Loss"))
@@ -1306,7 +1293,7 @@ cat("Company-wide weekly sales loss (moderate scenario):", dollar(total_impact_s
 
 ```
 
-```{}
+```         
 ```
 
 # Final Table

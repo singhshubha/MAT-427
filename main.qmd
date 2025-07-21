@@ -21,11 +21,11 @@ The main goal of this analysis is to **develop a recommendation sheet for butche
 
 To support this the analysis will also:
 
--   Segment stores into clear performance tiers and predicts shrink for each store.
+-   Segment stores into clear performance tiers.
 
 -   Identify key drivers for store profitability and shrink
 
--   Optimize butcher block lengths based on performance
+-   Optimize butcher block lengths based on performance.
 
 ## Approach
 
@@ -123,7 +123,7 @@ seafood_data <- data |>
 
 ```{r}
 character_cols <- c("Store ID", "Division", "Banner", "Street Address", "City", 
-                   "State", "Zip", "District", "Urbanicity")
+                   "ST", "ZIP", "District #", "Urbanicity")
 
 data <- data|>
   mutate(across(
@@ -176,7 +176,6 @@ performance_categories <- meat_data |>
     Meat_Performance_Category = meat_performance_category,
     Seafood_Performance_Category = seafood_performance_category
   )
-performance_categories
 
 cat("\nMeat Performance Distribution:\n")
 print(table(meat_performance_category))
@@ -192,6 +191,24 @@ print(table(seafood_performance_category))
 
 ## Performance Category Visualization
 
+The meat department performance is segmented into three categories: High, Medium, and Unprofitable, based on sales, shrink percentage, and labor hours. They are categorized based on:
+
+-   **Meat**
+
+    1.  High performance: \>\$3,000 in Meat Sales, \<4% in shrink pct, and ? 84 weekly labor hours
+
+    2.  Medium performance: \>\$1,000 in Meat Sales, \>4% and \<5% in Shrink pct, and \>28 labor hours per week
+
+    3.  Any store that does not meet these criteria is labeled Unprofitable
+
+-   **Seafood**
+
+    1.  High performance: \>\$3,000 in Seafood Sales, \<4% in shrink pct, and ? 84 weekly labor hours
+
+    2.  Medium performance: \>\$1,000 in Seafood Sales, \>4% and \<5% in Shrink pct, and \>28 labor hours per week
+
+    3.  Any store that does not meet these criteria is labeled Unprofitable
+
 ```{r}
 meat_counts <- meat_data |>
   count(performance_category) |>
@@ -202,9 +219,10 @@ meat_counts <- meat_data |>
 
 p1 <- ggplot(meat_counts, aes(x = performance_category, y = n, fill = performance_category)) +
   geom_col(alpha = 0.9) +
-  geom_text(aes(label = label), vjust = 1.5, color = "white", 
+  geom_text(aes(label = label), vjust = -0.1, color = "black", 
             fontface = "bold", size = 4) +
   scale_fill_manual(values = store_colors) +
+  scale_y_continuous(limits  = c(0, max(meat_counts$n) * 2)) +
   labs(
     title = "Meat Department Performance Distribution",
     x = NULL,
@@ -221,9 +239,10 @@ seafood_counts <- seafood_data |>
 
 p2 <- ggplot(seafood_counts, aes(x = performance_category, y = n, fill = performance_category)) +
   geom_col(alpha = 0.9) +
-  geom_text(aes(label = label), vjust = 1.5, color = "white", 
+  geom_text(aes(label = label), vjust = -0.1, color = "black", 
             fontface = "bold", size = 4) +
   scale_fill_manual(values = store_colors) +
+  scale_y_continuous(limits  = c(0, max(seafood_counts$n) * 2)) +
   labs(
     title = "Seafood Department Performance Distribution",
     x = NULL,
@@ -237,6 +256,8 @@ p1 / p2
 
 ## Key Metrics by Performance Tier
 
+### Meat Department
+
 ```{r metrics-by-tier}
 #| fig-height: 10
 p1 <- ggplot(meat_data, aes(x = performance_category, y = `Meat Sales`, 
@@ -245,30 +266,18 @@ p1 <- ggplot(meat_data, aes(x = performance_category, y = `Meat Sales`,
   scale_fill_manual(values = store_colors) +
   scale_y_continuous(breaks  = seq(0,14000, by = 1000), labels = seq(0,14000, by = 1000)) +
   labs(x = NULL, y = "Weekly Sales", title = "Sales Distribution") +
-  theme(legend.position = "none")
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45,hjust = 1))
 
-p2 <- ggplot(seafood_data, aes(x = performance_category, y = `Seafood Sales`, 
-                     fill = performance_category)) +
-  geom_boxplot(alpha = 0.7, outlier.alpha = 0.3) +
-  scale_fill_manual(values = store_colors) +
-  scale_y_continuous(breaks  = seq(0,14000, by = 1000), labels = seq(0,14000, by = 1000))  +
-  labs(x = NULL, y = "Weekly Sales", title = "Sales Distribution") +
-  theme(legend.position = "none")
 
 p3 <- ggplot(meat_data, aes(x = performance_category, y = `Meat Dept Shrink Pct`, 
                      fill = performance_category)) +
   geom_boxplot(alpha = 0.7, outlier.alpha = 0.3) +
   scale_fill_manual(values = store_colors) +
-  scale_y_continuous(breaks  = seq(-0.5, 0.5, by = 0.1), labels = seq(-0.5, 0.5, by = 0.1)) + 
+  scale_y_continuous(breaks  = seq(-0.5, 0.5, by = 0.1), labels = scales::percent) + 
   labs(x = NULL, y = "Shrink %", title = "Shrink Distribution") +
-  theme(legend.position = "none")
-p4 <- ggplot(seafood_data, aes(x = performance_category, y =  `Seafood Dept Shrink Pct`, 
-                     fill = performance_category)) +
-  geom_boxplot(alpha = 0.7, outlier.alpha = 0.3) +
-  scale_fill_manual(values = store_colors) +
-  scale_y_continuous(breaks  = seq(-0.5, 0.5, by = 0.1), labels = seq(-0.5, 0.5, by = 0.1)) + 
-  labs(x = NULL, y = "Shrink %", title = "Shrink Distribution") +
-  theme(legend.position = "none")
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
+
+
 
 p5 <- ggplot(meat_data, aes(x = performance_category, y = `Weekly Labor Hours`, 
                      fill = performance_category)) +
@@ -276,7 +285,36 @@ p5 <- ggplot(meat_data, aes(x = performance_category, y = `Weekly Labor Hours`,
   scale_fill_manual(values = store_colors) +
   scale_y_continuous(breaks  = seq(0, 250, by = 25), labels = seq(0, 250, by = 25)) + 
   labs(x = NULL, y = "Labor Hours", title = "Labor Distribution") +
-  theme(legend.position = "none")
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+(p1 | p3 | p5)
+
+```
+
+### Seafood Department
+
+```{r metrics-by-tier2}
+#| fig-height: 10
+
+p2 <- ggplot(seafood_data, aes(x = performance_category, y = `Seafood Sales`, 
+                     fill = performance_category)) +
+  geom_boxplot(alpha = 0.7, outlier.alpha = 0.3) +
+  scale_fill_manual(values = store_colors) +
+  scale_y_continuous(breaks  = seq(0,14000, by = 1000), labels = seq(0,14000, by = 1000))  +
+  labs(x = NULL, y = "Weekly Sales", title = "Sales Distribution") +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+p4 <- ggplot(seafood_data, aes(x = performance_category, y =  `Seafood Dept Shrink Pct`, 
+                     fill = performance_category)) +
+  geom_boxplot(alpha = 0.7, outlier.alpha = 0.3) +
+  scale_fill_manual(values = store_colors) +
+  scale_y_continuous(breaks  = seq(-0.5, 0.5, by = 0.1), labels = scales::percent) + 
+  labs(x = NULL, y = "Shrink %", title = "Shrink Distribution") +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
+
 
 p6 <- ggplot(seafood_data, aes(x = performance_category, y = `Weekly Labor Hours`, 
                      fill = performance_category)) +
@@ -284,9 +322,9 @@ p6 <- ggplot(seafood_data, aes(x = performance_category, y = `Weekly Labor Hours
   scale_fill_manual(values = store_colors) +
   scale_y_continuous(breaks  = seq(0, 250, by = 25), labels = seq(0, 250, by = 25)) + 
   labs(x = NULL, y = "Labor Hours", title = "Labor Distribution") +
-  theme(legend.position = "none")
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
 
-(p1 | p3 | p5)
+
 (p2| p4| p6)
 
 ```
@@ -346,7 +384,7 @@ create_performance_scatter(meat_data, "Meat Sales", "Meat Dept Shrink Pct", "Mea
 class_modeling_data <- meat_data |>
   select(performance_category, `Meat Sales`, `Meat Dept Shrink Pct`, `Meat Markdown`, 
          `Meat Markdown Quantity`, `Weekly Labor Hours`, `Meat Butcher Block`,
-         Division, Banner, `District #`, Urbanicity, `<%$45k`, `%$45-100k`, `>%$100k`
+         Division, `District #`, Urbanicity, `<%$45k`, `%$45-100k`, `>%$100k`
   ) |>
   mutate(performance_category = as.factor(performance_category))
 
@@ -393,7 +431,6 @@ class_metrics <- class_predictions |>
 conf_mat <- class_predictions |>
   conf_mat(truth = performance_category, estimate = .pred_class)
 
-cat("\n=== CLASSIFICATION MODEL PERFORMANCE ===\n")
 class_metrics |>
   filter(.metric %in% c("accuracy", "kap")) |>
   mutate(.estimate = round(.estimate, 3)) |>
@@ -420,7 +457,9 @@ class_vip
 
 # Store Segmentation Analysis
 
-```{r segmentation}
+### Meat butcher Block
+
+```{r segmentation meat}
 # Create detailed segments
 segmentation_data <- meat_data |>
   mutate(
@@ -462,8 +501,64 @@ segment_summary <- segmentation_data |>
   ) |>
   arrange(desc(Avg_Sales))
 
+segment_summary |>
+  select(-Performance_Distribution) |>
+  mutate(
+    Avg_Sales = dollar(Avg_Sales),
+    Avg_Shrink_Pct = percent(Avg_Shrink_Pct, 0.01),
+    Avg_Efficiency = dollar(Avg_Efficiency)
+  ) |>
+  kable(
+    col.names = c("Revenue", "Shrink Control", "Stores", "Avg Sales", 
+                  "Avg Shrink", "Sales/Hour"),
+    align = c("l", "l", "r", "r", "r", "r")
+  )
+```
 
-cat("=== STORE SEGMENTATION SUMMARY ===\n\n")
+### Seafood Butcher Block
+
+```{r segmentation seafood}
+# Create detailed segments
+segmentation_data <- seafood_data |>
+  mutate(
+    Sales_per_Hour = `Seafood Sales` / `Weekly Labor Hours`,
+    Markdown_Rate = `Seafood Markdown` / `Seafood Sales`,
+    Sales_per_Foot = `Seafood Sales` / `Seafood Butcher Block`,
+    
+    Revenue_Segment = cut(
+      `Seafood Sales`,
+      breaks = quantile(`Seafood Sales`, probs = c(0, 0.33, 0.67, 1), na.rm = TRUE),
+      labels = c("Low Revenue", "Mid Revenue", "High Revenue"),
+      include.lowest = TRUE
+    ),
+    
+    Efficiency_Segment = cut(
+      Sales_per_Hour,
+      breaks = quantile(Sales_per_Hour, probs = c(0, 0.33, 0.67, 1), na.rm = TRUE),
+      labels = c("Low Efficiency", "Mid Efficiency", "High Efficiency"),
+      include.lowest = TRUE
+    ),
+    
+    Shrink_Control = cut(
+      `Seafood Dept Shrink Pct`,
+      breaks = quantile(`Seafood Dept Shrink Pct`, probs = c(0, 0.33, 0.67, 1), na.rm = TRUE),
+      labels = c("Poor Control", "Average Control", "Good Control"),
+      include.lowest = TRUE
+    )
+  )
+
+segment_summary <- segmentation_data |>
+  group_by(Revenue_Segment, Shrink_Control) |>
+  summarise(
+    Store_Count = n(),
+    Avg_Sales = mean(`Seafood Sales`),
+    Avg_Shrink_Pct = mean(`Seafood Dept Shrink Pct`),
+    Avg_Efficiency = mean(Sales_per_Hour),
+    Performance_Distribution = list(table(performance_category)),
+    .groups = "drop"
+  ) |>
+  arrange(desc(Avg_Sales))
+
 segment_summary |>
   select(-Performance_Distribution) |>
   mutate(
@@ -491,7 +586,7 @@ shrink_modeling_data <- meat_data |>
     `Meat Sales`, `Meat Markdown`, `Meat Markdown Quantity`, 
     `Weekly Labor Hours`, `Meat Butcher Block`,
     # Store characteristics
-    Division, Banner, `District #`, Urbanicity,
+    Division, `District #`, Urbanicity,
     # Demographics
     `<%$45k`, `%$45-100k`, `>%$100k`, 
     `%Hispanic/Latino`, `%White`, `%Black/African American`, 
@@ -505,7 +600,7 @@ set.seed(2024)
 shrink_split <- initial_split(shrink_modeling_data, prop = 0.75)
 shrink_train <- training(shrink_split)
 shrink_test <- testing(shrink_split)
-
+shrink_train
 # Recipe for shrink prediction
 shrink_recipe <- recipe(`Meat Shrink` ~ ., data = shrink_train) |>
   step_novel(all_nominal_predictors()) |>
@@ -539,7 +634,7 @@ xgb_grid <- grid_latin_hypercube(
   size = 30
 )
 
-shrink_folds <- vfold_cv(shrink_train, v = 5, strata = Division)
+shrink_folds <- vfold_cv(shrink_train, v = 2, repeats = 2, strata = Division)
 
 # Tune model
 doParallel::registerDoParallel(cores = 4)
@@ -582,9 +677,7 @@ shrink_metrics |>
 
 # View actual vs predicted shrink values for the test set
 shrink_predictions |> 
-  select(`Store ID`, `Meat Shrink`, .pred, performance_category) |> 
-  arrange(desc(`Meat Shrink`)) 
-
+  select(`Store ID`, `Meat Shrink`, .pred, performance_category) 
 ggplot(shrink_predictions, aes(x = `Meat Shrink`, y = .pred)) +
   geom_point(alpha = 0.6) +
   geom_abline(linetype = "dashed", color = "red") +
@@ -633,7 +726,6 @@ shrink_importance <- shrink_fit |>
       Variable == "Meat_Markdown_Quantity" ~ "Volume of markdowns impacts shrink",
       Variable == "Meat_Butcher_Block" ~ "Display size affects product turnover",
       grepl("Division", Variable) ~ "Regional differences in shrink management",
-      grepl("Banner", Variable) ~ "Store format influences shrink rates",
       grepl("District", Variable) ~ "District-level operational differences",
       grepl("Urbanicity", Variable) ~ "Urban vs rural shrink patterns",
       grepl("%", Variable) ~ "Demographics influence shopping patterns",
@@ -691,7 +783,7 @@ shrink_performance_analysis <- meat_data |>
     .groups = "drop"
   )
 
-cat("\n=== SHRINK ANALYSIS BY PERFORMANCE CATEGORY ===\n")
+
 shrink_performance_analysis |>
   mutate(
     Avg_Shrink_Pct = percent(Avg_Shrink_Pct, 0.01),
@@ -702,7 +794,7 @@ shrink_performance_analysis |>
   ) |>
   kable(
     col.names = c("Performance", "Stores", "Avg Shrink", "Median Shrink", 
-                  "Min Shrink", "Max Shrink", "Std Dev"),
+                  "Max Shrink", "Min Shrink", "Std Dev"),
     caption = "Shrink statistics by store performance category"
   )
 
@@ -1023,28 +1115,13 @@ constraint_issues <- butcher_recommendations |>
          `Meat Butcher Block`, Meat_Optimal_Length,
          `Seafood Butcher Block`, Seafood_Optimal_Length)
 
-#if(nrow(constraint_issues) > 0) {
-#  cat("\n=== CONSTRAINT VALIDATION ISSUES ===\n")
-#  print(constraint_issues)
-#} else {
-#  cat("\n✓ All recommendations comply with 4ft increment and minimum length constraints\n"#)
-#}
-
-
-cat("\n=== 4FT INCREMENT CHANGE BREAKDOWN ===\n")
-change_breakdown <- butcher_recommendations |>
-  count(Meat_Length_Change, Seafood_Length_Change, name = "Store_Count") |>
-  filter(Meat_Length_Change != 0 | Seafood_Length_Change != 0) |>
-  arrange(Meat_Length_Change, Seafood_Length_Change)
-
-print(change_breakdown)
 ```
 
 ## Recommendations
 
 ```{r top-recommendations}
 high_impact_recommendations <- butcher_recommendations |>
-  filter(Priority_Score %in% c("HIGH", "MEDIUM")) |>
+  filter(Priority_Score %in% c("HIGH")) |>
   select(
     `Store ID`, Division, Banner,
     meat_performance, seafood_performance,
@@ -1054,9 +1131,8 @@ high_impact_recommendations <- butcher_recommendations |>
   ) |>
   arrange(desc(Priority_Score), desc(abs(Total_Operational_Expense)))
 
-cat("\n=== TOP PRIORITY BUTCHER BLOCK RECOMMENDATIONS ===\n")
+cat("\n=== BUTCHER BLOCK RECOMMENDATIONS WITH HIGH PRIORITY ===\n")
 high_impact_recommendations |>
-  head(15) |>
   mutate(
     Total_Operational_Expense = dollar(Total_Operational_Expense),
     Total_Sales_Impact = dollar(Total_Sales_Impact),
@@ -1110,103 +1186,43 @@ p3 <- ggplot(butcher_recommendations, aes(x = Total_Operational_Expense, y = Tot
 grid.arrange(p1, p2, p3, ncol = 1)
 ```
 
-## Export Recommendations
-
-```{r export-recommendations}
-
-final_recommendations <- butcher_recommendations |>
-  select(
-    `Store ID`, Division, Banner, City, ST,`Meat Sales`, `Seafood Sales`,
-    meat_performance, seafood_performance,
-    Meat_Sales_per_Foot, Seafood_Sales_per_Foot,`Meat Butcher Block`, `Seafood Butcher Block`,Meat_Optimal_Length, Seafood_Optimal_Length,Meat_Recommendation, Seafood_Recommendation,Total_Operational_Expense, Total_Sales_Impact, Breakeven_Months, Priority_Score
-  ) |>
-  arrange(desc(Priority_Score), desc(abs(Total_Operational_Expense)))
-
-cat("=== PREVIEW OF FINAL RECOMMENDATIONS ===")
-final_recommendations |>
-  head(100) |>
-  select(`Store ID`, Division, Meat_Recommendation, Seafood_Recommendation, Priority_Score) |>
-  kable()
-
-cat(paste("\nTotal stores analyzed:", nrow(final_recommendations)))
-cat(paste("\nStores with recommended changes:", sum(final_recommendations$Priority_Score != "NO CHANGE")))
-cat(paste("\nHigh priority changes:", sum(final_recommendations$Priority_Score == "HIGH")))
-
-```
-
 ## Sales impact Analysis
 
 ```{r sales-impact-analysis}
 #| fig-height: 12
 create_detailed_sales_impact_table <- function(recommendations_data) {
-
+ # Moderate scenario (25% sales loss per foot reduced)
   sales_impact_analysis <- recommendations_data |>
     mutate(
-      # Conservative scenario (10% sales loss per foot reduced)
-      Conservative_Meat_Loss = case_when(
-        Meat_Length_Change < 0 ~ abs(Meat_Length_Change) * Meat_Sales_per_Foot * 0.10,
-        TRUE ~ 0
-      ),
-      Conservative_Seafood_Loss = case_when(
-        Seafood_Length_Change < 0 ~ abs(Seafood_Length_Change) * Seafood_Sales_per_Foot * 0.10,
-        TRUE ~ 0
-      ),
-      
-      # Moderate scenario (25% sales loss per foot reduced)
-      Moderate_Meat_Loss = case_when(
+     
+      Meat_Loss = case_when(
         Meat_Length_Change < 0 ~ abs(Meat_Length_Change) * Meat_Sales_per_Foot * 0.25,
         TRUE ~ 0
       ),
-      Moderate_Seafood_Loss = case_when(
+      Seafood_Loss = case_when(
         Seafood_Length_Change < 0 ~ abs(Seafood_Length_Change) * Seafood_Sales_per_Foot * 0.25,
         TRUE ~ 0
       ),
-      
-      # Pessimistic scenario (50% sales loss per foot reduced)
-      Pessimistic_Meat_Loss = case_when(
-        Meat_Length_Change < 0 ~ abs(Meat_Length_Change) * Meat_Sales_per_Foot * 0.50,
-        TRUE ~ 0
-      ),
-      Pessimistic_Seafood_Loss = case_when(
-        Seafood_Length_Change < 0 ~ abs(Seafood_Length_Change) * Seafood_Sales_per_Foot * 0.50,
-        TRUE ~ 0
-      ),
 
-      Conservative_Weekly_Loss = Conservative_Meat_Loss + Conservative_Seafood_Loss,
-      Moderate_Weekly_Loss = Moderate_Meat_Loss + Moderate_Seafood_Loss,
-      Pessimistic_Weekly_Loss = Pessimistic_Meat_Loss + Pessimistic_Seafood_Loss,
-      
-      Conservative_Annual_Loss = Conservative_Weekly_Loss * 52,
-      Moderate_Annual_Loss = Moderate_Weekly_Loss * 52,
-      Pessimistic_Annual_Loss = Pessimistic_Weekly_Loss * 52,
+      Weekly_Loss = Meat_Loss + Seafood_Loss,
+      Annual_Loss = Weekly_Loss * 52,
       
       # Break-even calculations (months to recover operational expense through sales)
-      Conservative_Breakeven_Months = case_when(
-        Conservative_Weekly_Loss > 0 & Total_Operational_Expense > 0 ~ 
-          Total_Operational_Expense / (Conservative_Weekly_Loss * 4.33),
-        TRUE ~ 0
-      ),
-      Moderate_Breakeven_Months = case_when(
-        Moderate_Weekly_Loss > 0 & Total_Operational_Expense > 0 ~ 
-          Total_Operational_Expense / (Moderate_Weekly_Loss * 4.33),
-        TRUE ~ 0
-      ),
-      Pessimistic_Breakeven_Months = case_when(
-        Pessimistic_Weekly_Loss > 0 & Total_Operational_Expense > 0 ~ 
-          Total_Operational_Expense / (Pessimistic_Weekly_Loss * 4.33),
+      Breakeven_Months = case_when(
+        Weekly_Loss > 0 & Total_Operational_Expense > 0 ~ 
+          Total_Operational_Expense / (Weekly_Loss * 4.33),
         TRUE ~ 0
       ),
       
       # Sales impact as percentage of current sales
-      Conservative_Sales_Impact_Pct = (Conservative_Weekly_Loss / (`Meat Sales` + `Seafood Sales`)) * 100,
-      Moderate_Sales_Impact_Pct = (Moderate_Weekly_Loss / (`Meat Sales` + `Seafood Sales`)) * 100,
-      Pessimistic_Sales_Impact_Pct = (Pessimistic_Weekly_Loss / (`Meat Sales` + `Seafood Sales`)) * 100
+      Sales_Impact_Pct = (Weekly_Loss / (`Meat Sales` + `Seafood Sales`)) * 100
     )
   
   return(sales_impact_analysis)
 }
 
 enhanced_recommendations <- create_detailed_sales_impact_table(butcher_recommendations)
+
 sales_impact_summary <- enhanced_recommendations |>
   filter(Meat_Length_Change < 0 | Seafood_Length_Change < 0) |>
   select(
@@ -1214,17 +1230,16 @@ sales_impact_summary <- enhanced_recommendations |>
     meat_performance, seafood_performance,
     `Meat Butcher Block`, `Seafood Butcher Block`,
     Meat_Length_Change, Seafood_Length_Change,
-    Conservative_Weekly_Loss, Moderate_Weekly_Loss, Pessimistic_Weekly_Loss,
-    Conservative_Annual_Loss, Moderate_Annual_Loss, Pessimistic_Annual_Loss,
-    Conservative_Sales_Impact_Pct, Moderate_Sales_Impact_Pct, Pessimistic_Sales_Impact_Pct,
-    Conservative_Breakeven_Months, Moderate_Breakeven_Months, Pessimistic_Breakeven_Months, Priority_Score
+    Weekly_Loss,
+    Sales_Impact_Pct,
+    Breakeven_Months, Priority_Score
   ) |>
-  arrange(desc(Priority_Score), desc(Moderate_Weekly_Loss))
+  arrange(desc(Priority_Score), desc(Weekly_Loss))
 
 
 cat("=== DETAILED SALES IMPACT ANALYSIS ===\n")
-cat("Shows potential weekly and annual sales losses from butcher block reductions\n\n")
-
+cat("Shows potential weekly sales losses from butcher block reductions\n\n")
+cat("Assuming moderate scenario (25% sales loss per foot reduced)\n\n")
 
 
 
@@ -1235,39 +1250,35 @@ sales_impact_simple <- sales_impact_summary |>
   select(
     `Store ID`, Banner, 
     Meat_Length_Change, Seafood_Length_Change,
-    Moderate_Weekly_Loss, 
-    Moderate_Sales_Impact_Pct, Priority_Score
+    Weekly_Loss, 
+    Sales_Impact_Pct, Priority_Score
   ) |>
   mutate(
     Meat_Length_Change = paste0(Meat_Length_Change, " ft"),
     Seafood_Length_Change = paste0(Seafood_Length_Change, " ft"),
-    Moderate_Weekly_Loss = dollar(Moderate_Weekly_Loss),
-    Moderate_Sales_Impact_Pct = paste0(round(Moderate_Sales_Impact_Pct, 1), "%")
+    Weekly_Loss = dollar(Weekly_Loss),
+    Sales_Impact_Pct = paste0(round(Sales_Impact_Pct, 1), "%")
   )
-ncol(sales_impact_simple)
+
 kable(sales_impact_simple, 
       col.names = c("Store ID", "Banner", "Meat Change", "Seafood Change", 
                     "Weekly Loss", "% Impact", "Priority"),
-      caption = "Sales Impact Analysis - Top 15 Stores with Reductions")
+      caption = "Sales Impact Analysis - Top Stores with Reductions")
 
 aggregate_impact <- enhanced_recommendations |>
   filter(Meat_Length_Change < 0 | Seafood_Length_Change < 0) |>
   group_by(Priority_Score) |>
   summarise(
     Store_Count = n(),
-    Total_Annual_Loss_Conservative = sum(Conservative_Annual_Loss),
-    Total_Annual_Loss_Moderate = sum(Moderate_Annual_Loss),
-    Total_Annual_Loss_Pessimistic = sum(Pessimistic_Annual_Loss),
+    Total_Annual_Loss = sum(Annual_Loss),
     .groups = "drop"
   ) |>
-  arrange(desc(Priority_Score), desc(Total_Annual_Loss_Moderate))
+  arrange(desc(Priority_Score), desc(Total_Annual_Loss))
 
 cat("\n=== AGGREGATE SALES IMPACT BY PRIORITY AND RISK ===\n")
 aggregate_impact |>
   mutate(
-    Total_Annual_Loss_Conservative = dollar(Total_Annual_Loss_Conservative),
-    Total_Annual_Loss_Moderate = dollar(Total_Annual_Loss_Moderate),
-    Total_Annual_Loss_Pessimistic = dollar(Total_Annual_Loss_Pessimistic),
+    Total_Annual_Loss = dollar(Total_Annual_Loss),
   ) |>
   kable()
 
@@ -1275,64 +1286,38 @@ aggregate_impact |>
 #Visualizations
 sales_impact_viz <- enhanced_recommendations |>
   filter(Meat_Length_Change < 0 | Seafood_Length_Change < 0) |>
-  select(`Store ID`, Conservative_Weekly_Loss, Moderate_Weekly_Loss, 
-         Pessimistic_Weekly_Loss, Priority_Score) |>
+  select(`Store ID`, Weekly_Loss, Priority_Score) |>
   slice_head(n = 10) |>  # Limit to top 30 stores for readability
-  pivot_longer(cols = c(Conservative_Weekly_Loss, Moderate_Weekly_Loss, Pessimistic_Weekly_Loss),
+  pivot_longer(cols = c(Weekly_Loss),
                names_to = "Scenario", values_to = "Weekly_Loss") |>
-  mutate(Scenario = str_remove(Scenario, "_Weekly_Loss"))
-
-p_sales_impact <- ggplot(sales_impact_viz, aes(x = reorder(`Store ID`, Weekly_Loss), 
-                                              y = Weekly_Loss, fill = Scenario)) +
-  geom_col(position = "dodge", alpha = 0.8) +
-  facet_wrap(~ Priority_Score, scales = "free_x") +
-  scale_y_continuous(labels = dollar) +
-  scale_fill_manual(values = c("Conservative" = "#2E7D32", 
-                              "Moderate" = "#1976D2", 
-                              "Pessimistic" = "#C62828")) +
-  labs(
-    title = "Weekly Sales Loss by Store and Scenario",
-    subtitle = "Estimated impact of butcher block reductions (Top 30 stores)",
-    x = "Store ID",
-    y = "Weekly Sales Loss",
-    fill = "Loss Scenario"
-  ) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
-
+  mutate(Scenario = str_remove(Scenario, "Weekly_Loss"))
 
 
 total_impact_summary <- enhanced_recommendations |>
   filter(Meat_Length_Change < 0 | Seafood_Length_Change < 0) |>
   summarise(
     Total_Stores_Affected = n(),
-    Company_Wide_Weekly_Loss_Conservative = sum(Conservative_Weekly_Loss),
-    Company_Wide_Weekly_Loss_Moderate = sum(Moderate_Weekly_Loss),
-    Company_Wide_Weekly_Loss_Pessimistic = sum(Pessimistic_Weekly_Loss),
-    Company_Wide_Annual_Loss_Conservative = sum(Conservative_Annual_Loss),
-    Company_Wide_Annual_Loss_Moderate = sum(Moderate_Annual_Loss),
-    Company_Wide_Annual_Loss_Pessimistic = sum(Pessimistic_Annual_Loss),
-    Avg_Store_Impact_Pct = mean(Moderate_Sales_Impact_Pct)
+    Company_Wide_Weekly_Loss = sum(Weekly_Loss),
   )
 
 cat("\n=== COMPANY-WIDE SALES IMPACT SUMMARY ===\n")
 cat("Total stores with recommended reductions:", total_impact_summary$Total_Stores_Affected, "\n")
-cat("Company-wide weekly sales loss (moderate scenario):", dollar(total_impact_summary$Company_Wide_Weekly_Loss_Moderate), "\n")
-cat("Company-wide annual sales loss (moderate scenario):", dollar(total_impact_summary$Company_Wide_Annual_Loss_Moderate), "\n")
+cat("Company-wide weekly sales loss (moderate scenario):", dollar(total_impact_summary$Company_Wide_Weekly_Loss), "\n")
+
+```
+
+```{}
 ```
 
 # Final Table
 
 ```{r detailed-sales-impact-table}
-# Create a more detailed table for stakeholder review
-detailed_sales_impact <- enhanced_recommendations |>
-  filter(Priority_Score %in% c("HIGH", "MEDIUM")) |>
+final <- enhanced_recommendations |>
   select(
-    `Store ID`, Division, Banner, City, ST,
-    meat_performance, seafood_performance,
-    `Meat Butcher Block`, `Seafood Butcher Block`,
-    Meat_Length_Change, Seafood_Length_Change,
-    `Meat Sales`, `Seafood Sales`,
+    `Store ID`, Division, City, ST,
+    `Meat Sales`, meat_performance,`Meat Butcher Block`,Meat_Length_Change, Meat_Recommendation,
+    `Seafood Sales`, seafood_performance, `Seafood Butcher Block`, Seafood_Length_Change, Seafood_Recommendation,
+    ,  
     Priority_Score,
     Breakeven_Months 
   ) |>
@@ -1344,12 +1329,20 @@ detailed_sales_impact <- enhanced_recommendations |>
   )
 
 cat("\n=== DETAILED IMPACT TABLE FOR HIGH & MEDIUM PRIORITY STORES ===\n")
-detailed_sales_impact |>
+final |>
+  arrange(`Store ID`) |>
   kable(
-    col.names = c("Store ID", "Division", "Banner", "City", "State",
-                  "Meat Perf", "Seafood Perf", "Meat Length", "Seafood Length",
-                  "Meat Change", "Seafood Change", "Meat Sales", "Seafood Sales",
-                  "Priority", "Breakeven Months"),
+    col.names = c("Store ID", "Division", "City", "ST",
+                  "Meat Sales", "meat performance",  "Meat Butcher Block", 
+                  "Meat_Length_Change","Meat_Recommendation","Seafood Sales","seafood performance","Seafood Butcher Block", "Seafood_Length_Change","Seafood_Recommendation", 
+                  "Priority_Score", "Breakeven Months"),
     caption = "Stores: Detailed Impact Analysis"
   )
+
+```
+
+```{r}
+cat(paste("\nTotal stores analyzed:", nrow(final)))
+cat(paste("\nStores with recommended changes:", sum(final$Priority_Score != "NO CHANGE")))
+cat(paste("\nHigh priority changes:", sum(final$Priority_Score == "HIGH")))
 ```
